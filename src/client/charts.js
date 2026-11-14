@@ -194,7 +194,7 @@ export function TokenHeatmap({ days, rangeDays, now }) {
   const scrollState = useRef({ overflowing: false, atRight: true });
 
   const grid = useMemo(() => buildHeatGrid(days, HEATMAP_DAYS, now), [days, now]);
-  const peak = useMemo(() => days.reduce((max, day) => Math.max(max, day.total), 0), [days]);
+  const peak = useMemo(() => days.reduce((max, day) => Math.max(max, day.total ?? 0), 0), [days]);
 
   useEffect(() => {
     const node = host.current;
@@ -384,7 +384,7 @@ export function TokenTrend({ days, series, rangeDays }) {
     return { count, labels, lines, gridLines, ticks, xOf, peak };
   }, [days, series, rangeDays, width, height, padTop, padRight, padBottom, padLeft]);
 
-  const hover = hoverIndex === null ? null : plot.labels[hoverIndex];
+  const hover = hoverIndex === null ? null : (plot.labels[hoverIndex] ?? null);
 
   return h(
     'div',
@@ -575,8 +575,8 @@ export function TokenCacheRate({ days, rangeDays }) {
 
   const empty = plot.values.length === 0;
 
-  const hover = hoverIndex === null ? null : plot.labels[hoverIndex];
-  const hoverRate = hoverIndex === null ? null : plot.rates[hoverIndex];
+  const hover = hoverIndex === null ? null : (plot.labels[hoverIndex] ?? null);
+  const hoverRate = hoverIndex === null ? null : (plot.rates[hoverIndex] ?? null);
   const hoverTotals = hover?.entry?.totals;
   const hoverRead = hoverTotals?.cacheReadTokens ?? 0;
   const hoverInput =
@@ -1038,7 +1038,7 @@ export function ModelUsageChart({ days, models, rangeDays }) {
   }, [days, models, rangeDays, granularity, width, height, padTop, padRight, padBottom, padLeft]);
 
   const empty = models.length === 0 || plot.values.every((value) => value <= 0);
-  const hover = hoverIndex === null ? null : plot.bars[hoverIndex];
+  const hover = hoverIndex === null ? null : (plot.bars[hoverIndex] ?? null);
   const hoverRows = [];
   if (hover !== null) {
     hoverRows.push(`总计 ${formatTokensZh(hover.total)} tokens`);

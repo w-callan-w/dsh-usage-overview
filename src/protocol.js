@@ -6,7 +6,6 @@ export const NS = 'usage-overview';
 
 export const USAGE_STATS_PATH = '/plugins/dsh-usage-overview/stats';
 
-export const USAGE_SESSION_PATH = '/plugins/dsh-usage-overview/session';
 
 export const RANGE_PRESETS = Object.freeze([
   { id: '7d', days: 7 },

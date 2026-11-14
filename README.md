@@ -1,63 +1,55 @@
-# DSH Usage Overview
+# DSH 用量总览
 
-[简体中文](README.zh-CN.md)
+[English](README.en.md)
 
-A usage overview plugin for DeepSeek Harness. It reads the harness's own session
-records and presents token totals, an annual activity heatmap, daily token and
-cache-hit-rate trends, and a per-model breakdown with a stacked day/week chart.
+一款 DeepSeek Harness 的用量总览面板插件。插件直接读取 Harness 自身的会话记录，
+展示 Token 总量、全年活跃热力图、每日 Token 与缓存命中率趋势，以及按模型拆分的
+用量构成和按日/按周堆叠图。
 
 [GitHub](https://github.com/w-callan-w/dsh-usage-overview) · [Gitee](https://gitee.com/callanjones/deep-seek-harness-usage-plugin) · [npm](https://www.npmjs.com/package/dsh-usage-overview)
 
-## Features
+## 功能
 
-- **Headline metrics** — total tokens, peak day, longest chat, current and
-  longest streaks, and prompt-cache hit rate.
-- **Token activity** — a year of daily usage as a Sunday-aligned heatmap with
-  five intensity levels.
-- **Daily token trend** — one smoothed line per provider route, with a shared
-  crosshair and per-route legend totals.
-- **Daily cache hit rate** — input-token weighted cache hit rate per day, with
-  gaps for days that had no input tokens.
-- **Model usage** — a donut chart, an attributed model list (provider source,
-  sessions, turns, tokens, share), and a stacked daily/weekly usage chart.
-- **Range selector** — 7, 30, 90 days, or all time.
-- **Fluid layout** — sized against the panel, not the window; the card strip,
-  model panel, range control, and charts adapt continuously to the available
-  width.
-- **Light and dark themes** — colours come from DSH theme tokens, including the
-  tooltip's own dark-surface label token.
+- **头部指标**：累计 Token、单日峰值、最长聊天时长、当前/最长连续天数、缓存命中率。
+- **Token 活动**：最近一年的每日用量热力图，周日对齐，五级强度。
+- **每日 Token 趋势**：每个 Provider 路由一条平滑曲线，共享十字准线，图例显示各自合计。
+- **每日缓存命中率**：按输入 Token 加权的每日命中率；当天没有输入 Token 时留空，不画成 0%。
+- **模型用量**：圆环图、带来源的模型列表（Provider、会话数、轮数、Token、占比），
+  以及按日/按周切换的堆叠柱状图。
+- **时间范围**：近 7 日、近 30 日、近 90 日、全部。
+- **无级自适应布局**：按面板宽度而不是窗口宽度布局；统计卡、模型区、时间范围控件
+  和图表都会随可用空间连续调整。
+- **浅色/深色主题**：颜色来自 DSH 主题 Token；提示气泡使用自身深色表面的专用前景色。
 
-| Desktop | Phone (390px) |
+| 桌面 | 手机（390px） |
 |---|---|
-| ![Desktop](docs/dashboard.png) | ![Phone](docs/dashboard-mobile.png) |
+| ![桌面](docs/dashboard.png) | ![手机](docs/dashboard-mobile.png) |
 
-## Install
+## 安装
 
-The plugin is a DSH bundle. It needs a harness build that provides the
-`webServer` service.
+本插件是一个 DSH Bundle，需要宿主提供 `webServer` 服务。
 
-### From npm
+### 从 npm 安装
 
-The package is published as `dsh-usage-overview`. Add it to the active profile:
+包名为 `dsh-usage-overview`。把它加入当前 Profile：
 
 ```sh
 cd "$DSH_HOME/profiles/desktop"
 pnpm add dsh-usage-overview
 ```
 
-Then add `"dsh-usage-overview"` to `dsh.profile.bundles` in that profile's
-`package.json` and restart DeepSeek Harness.
+然后在 Profile 的 `package.json` 中把 `"dsh-usage-overview"` 加入
+`dsh.profile.bundles`，重启 DeepSeek Harness。
 
-### From a local copy
+### 从本地目录安装
 
-1. Copy the package into the target profile:
+1. 将包复制到目标 Profile：
 
    ```sh
    cp -r dsh-usage-overview "$DSH_HOME/profiles/desktop/node_modules/"
    ```
 
-2. Add it to the profile's bundle list in
-   `$DSH_HOME/profiles/desktop/package.json`:
+2. 在 `$DSH_HOME/profiles/desktop/package.json` 的 Bundle 列表中注册：
 
    ```json
    {
@@ -69,109 +61,94 @@ Then add `"dsh-usage-overview"` to `dsh.profile.bundles` in that profile's
    }
    ```
 
-3. Restart DeepSeek Harness. The sidebar entry **用量统计** / **Usage** appears
-   after the profile is composed.
+3. 重启 DeepSeek Harness。侧边栏出现 **用量统计** 入口。
 
-The Desktop shell composes its profile once at launch. Editing files while it is
-running does not mount a new bundle; quit and relaunch. A CLI-launched profile
-with DSH's HMR bundle can reload on a manifest change.
+Desktop 版本只在启动时组装一次 Profile，运行中修改文件不会挂载新 Bundle，需要退出并
+重新启动。使用 DSH HMR Bundle 的 CLI Profile 可以在清单变化时自动重载。
 
-## Usage
+## 使用
 
-Open **用量统计** in the sidebar.
+在侧边栏打开 **用量统计**。
 
-- The range selector controls the headline metrics, the daily token trend, the
-  cache-rate chart, and the model usage trend.
-- The activity heatmap always draws a year grid; the range selector does not
-  change its window.
-- Hovering a chart raises exact figures for the hovered day or week.
-- The model usage chart has a **每日 / 每周** switch. Weeks start on Monday; a
-  partial week at either end of the range remains visible.
-- On narrow panels the heatmap scrolls horizontally and opens at the most recent
-  weeks.
+- 时间范围控制头部指标、每日 Token 趋势、缓存命中率图以及模型用量趋势。
+- Token 活动始终绘制全年网格，时间范围不会改变它的窗口。
+- 悬停图表可查看对应日期/周的精确数据。
+- 模型用量图支持 **每日 / 每周** 切换；周以周一为起点，首尾不完整的周仍会显示。
+- 面板较窄时，热力图可横向滚动，并默认定位到最新几周。
 
-## Data
+## 数据来源
 
-The plugin reads durable harness data only. It writes no harness state, calls no
-model, and registers no model-facing tool.
+插件只读取 Harness 的持久化数据，不写入任何 Harness 状态，不调用模型，也不注册
+面向模型的工具。
 
-1. **Session logs** — `$DSH_HOME/sessions/<workspace>/<session>/session.v4.jsonl.zstd`.
-   Each log is a sequence of independently compressed zstd frames; every frame is
-   decoded separately. Assistant messages carry their own timestamp, provider
-   usage, provider, and model, which yields the real daily and per-route series.
-2. **Session index** — directory names provide session identity, creation time,
-   and log paths.
-3. **Projection cache** — `$DSH_HOME/storages/session_projcache/sessions/*.json`
-   is a fallback for unreadable logs and supplies session titles.
-4. **Live session services** — `ctx.sessions.list()` and
-   `ctx.sessionProjections.snapshot(session)` make an active session's running
-   totals count immediately.
+1. **会话日志**：`$DSH_HOME/sessions/<workspace>/<session>/session.v4.jsonl.zstd`。
+   每个日志由多个独立压缩的 zstd frame 组成，需要逐帧解码。assistant 消息自带时间、
+   Provider 用量、Provider 和模型信息，可还原真实的每日与分路由数据。
+2. **会话索引**：目录信息提供会话 ID、创建时间和日志路径。
+3. **投影缓存**：`$DSH_HOME/storages/session_projcache/sessions/*.json` 在日志不可读时
+   作为兜底，并提供会话标题。
+4. **实时会话服务**：`ctx.sessions.list()` 与
+   `ctx.sessionProjections.snapshot(session)` 让正在运行的会话立即计入统计。
 
-Cache reads are counted as billed tokens. The cache hit rate is:
+缓存读取按计费 Token 计入。缓存命中率公式：
 
 ```text
 cacheRead / (cacheRead + cacheWrite + uncachedInput)
 ```
 
-Output tokens are excluded because they are not cacheable.
+输出 Token 不参与计算，因为输出无法命中缓存。
 
-## HTTP surface
+## HTTP 接口
 
-Both routes are read-only.
+接口只读，不写入任何 Harness 状态。
 
-| Route | Purpose |
+| 路由 | 用途 |
 |---|---|
-| `GET /plugins/dsh-usage-overview/stats?range=7d\|30d\|90d\|all` | Aggregate dashboard document |
-| `GET /plugins/dsh-usage-overview/session?id=<session-id>` | One durable session record |
+| `GET /plugins/dsh-usage-overview/stats?range=7d\|30d\|90d\|all` | 聚合后的看板数据 |
 
-A request is accepted when it comes from loopback, or when DSH's session
-authentication vouches for it. The second path lets a phone reach the panel
-through the remote tunnel without opening the route to anonymous callers.
+来自本机回环地址的请求会被接受；经过 DSH 会话认证的远程请求同样会被接受，因此
+手机通过远程隧道访问时无需把接口暴露给匿名调用者。
 
-The browser half is provided by DSH's client module system and advertised in the
-page's boot graph.
+浏览器端由 DSH 客户端模块系统提供，并在页面的 boot graph 中声明。
 
-## Development
+## 开发
 
-No bundler or runtime dependency is required. Node.js runs the build and check
-scripts directly.
+构建和检查脚本不依赖打包器，直接用 Node.js 运行。
 
 ```sh
 node scripts/build.mjs
 ```
 
-This copies the Host half (`lib/*.js`) from `src/` and bundles the browser half
-into `lib/client.js` using DSH's module-loading format.
+该命令把 Host 端的 `lib/*.js` 从 `src/` 复制过去，并把浏览器端打包成
+`lib/client.js`（DSH 的模块加载格式）。
 
-### Checks
+### 检查
 
-| Command | Purpose |
+| 命令 | 作用 |
 |---|---|
-| `node scripts/check-sources.mjs` | Client source syntax and stylesheet template |
-| `node scripts/lint-bundle.mjs` | Built browser bundle parses |
-| `node scripts/check-build-fresh.mjs` | Committed `lib/` matches a fresh build |
-| `node scripts/test-aggregation.mjs` | Aggregation, attribution, cache-rate, and edge cases |
-| `node scripts/render-check.mjs` | Bundle materializes and renders in a React stub |
-| `node scripts/preview.mjs` | Static dashboard preview |
-| `node scripts/responsive-check.mjs [origin]` | Seven widths, live resize, light/dark contrast, screenshots |
-| `node scripts/verify-install.mjs` | Installed profile package, exports, routes, trust guard |
-| `node scripts/verify-live.mjs [origin]` | Running host serves the routes and bundle |
+| `node scripts/check-sources.mjs` | 客户端源码语法与样式模板 |
+| `node scripts/lint-bundle.mjs` | 构建后的浏览器 Bundle 可解析 |
+| `node scripts/check-build-fresh.mjs` | `lib/` 与最新构建一致 |
+| `node scripts/test-aggregation.mjs` | 聚合、归属、缓存命中率与边界条件 |
+| `node scripts/render-check.mjs` | Bundle 可物化并在 React Stub 中渲染 |
+| `node scripts/preview.mjs` | 生成静态预览 |
+| `node scripts/responsive-check.mjs [origin]` | 七种宽度、实时缩放、浅色/深色对比度、截图 |
+| `node scripts/verify-install.mjs` | 已安装 Profile 的清单、导出、路由与信任校验 |
+| `node scripts/verify-live.mjs [origin]` | 运行中的宿主确实提供路由和 Bundle |
 
-`responsive-check.mjs` and `verify-live.mjs` need a running host; pass its origin
-when it is not the default `http://127.0.0.1:50494`.
+`responsive-check.mjs` 与 `verify-live.mjs` 需要宿主正在运行；如果端口不是默认的
+`http://127.0.0.1:50494`，请把实际地址作为参数传入。
 
-## Layout and theming
+## 布局与主题
 
-The dashboard measures the panel, not the viewport. The card strip flows on a
-150px basis, the model panel and range control wrap by content width, and each
-chart redraws at its measured pixel width. Type, spacing, and padding scale with
-container query units, so there are no hard layout breakpoints.
+看板测量的是面板宽度，不是窗口宽度。统计卡以 150px 为基准自动换行，模型区和时间
+范围控件按内容宽度决定并排或换行，每个图表按测量到的像素宽度重绘；字号、间距和
+内边距使用容器查询单位连续缩放，不依赖固定布局断点。
 
-Colours use DSH `--dsw-*` tokens for both themes. The tooltip is a dark surface in
-both light and dark mode and therefore uses `--dsw-alias-tooltip-label`; small
-labels and chart axes use the higher-contrast secondary label token. The
-`responsive-check.mjs` theme pass enforces a minimum contrast ratio of 4.5:1.
+颜色使用 DSH 的 `--dsw-*` 主题 Token。提示气泡在浅色和深色主题下都是深色表面，
+因此使用 `--dsw-alias-tooltip-label`；小号标签和图表坐标轴使用对比度更高的
+Secondary 文本 Token。`responsive-check.mjs` 的主题检查会强制最低对比度不低于 4.5:1。
 
-## License
+## 许可证
 
 MIT

@@ -4,12 +4,11 @@ import { join } from 'node:path';
 import {
   PANEL_ID,
   PROVIDER_SOURCE_LABELS,
-  USAGE_SESSION_PATH,
   USAGE_STATS_PATH,
 } from './protocol.js';
 import { buildUsageDocument, collectSessions, mergeLive } from './usage.js';
 
-export { PANEL_ID, NS, USAGE_STATS_PATH, USAGE_SESSION_PATH } from './protocol.js';
+export { PANEL_ID, NS, USAGE_STATS_PATH } from './protocol.js';
 
 export const inject = ['webServer'];
 
@@ -175,41 +174,5 @@ export function apply(ctx) {
       })();
     },
     'stats route',
-  );
-
-  mount(
-    USAGE_SESSION_PATH,
-    (req, res) => {
-      void (async () => {
-        if (req.method !== 'GET' && req.method !== 'HEAD') {
-          json(res, 405, { error: 'method-not-allowed' });
-          return;
-        }
-        if (!trustedRequest(ctx, req)) {
-          json(res, 403, { error: 'request-not-trusted' });
-          return;
-        }
-        try {
-          const url = new URL(req.url ?? '/', 'http://127.0.0.1');
-          const id = url.searchParams.get('id');
-          if (id === null || id.length === 0) {
-            json(res, 400, { error: 'missing-session-id' });
-            return;
-          }
-          const home = resolveHome();
-          const sessions = await collectSessions(home);
-          const found = sessions.find((session) => session.id === id);
-          if (found === undefined) {
-            json(res, 404, { error: 'session-not-found' });
-            return;
-          }
-          json(res, 200, { schemaVersion: 1, session: found });
-        } catch (error) {
-          ctx.logger?.warn?.(`dsh-usage-overview: session read failed: ${String(error)}`);
-          json(res, 500, { error: 'usage-unavailable' });
-        }
-      })();
-    },
-    'session route',
   );
 }

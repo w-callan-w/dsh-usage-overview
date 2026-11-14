@@ -1,4 +1,5 @@
 import { readFile, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
@@ -88,7 +89,7 @@ function render(node) {
   return `<${type}${attrs.length ? ` ${attrs.join(' ')}` : ''}>${body}</${type}>`;
 }
 
-const home = process.env.DSH_HOME ?? 'C:\\Users\\lzf\\.dsh';
+const home = process.env.DSH_HOME ?? join(homedir(), '.dsh');
 const sessions = await collectSessions(home);
 const now = Date.now();
 const doc = buildUsageDocument(sessions, {

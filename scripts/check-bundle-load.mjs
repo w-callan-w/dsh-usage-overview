@@ -1,9 +1,13 @@
 import { createRequire } from 'node:module';
 import { existsSync, readFileSync, statSync, readdirSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 
-const appPackage = 'D:\\Programs\\DeepSeek Harness\\resources\\app.asar\\dsh\\package.json';
-const profileDir = join(process.env.DSH_HOME ?? 'C:\\Users\\lzf\\.dsh', 'profiles', 'desktop');
+const appRoot =
+  process.env.DSH_APP_ROOT ??
+  join(process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local'), 'Programs', 'DeepSeek Harness');
+const appPackage = join(appRoot, 'resources', 'app.asar', 'dsh', 'package.json');
+const profileDir = join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'profiles', 'desktop');
 
 function packageDirFromAnchor(anchor, packageName) {
   for (const searchPath of createRequire(anchor).resolve.paths(packageName) ?? []) {

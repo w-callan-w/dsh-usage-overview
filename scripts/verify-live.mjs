@@ -61,10 +61,6 @@ if (stats.status !== 200) {
   }
 }
 
-const session = await get('/plugins/dsh-usage-overview/session');
-if (session.status !== 400) fail('session route rejects a missing id with 400', `status ${String(session.status)}`);
-else pass('session route rejects a missing id with 400');
-
 const index = await get('/');
 if (index.status === 401) {
   console.log('SKIP  boot graph — the index needs the browser cookie (open the app URL to mint it)');

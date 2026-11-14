@@ -12,3 +12,9 @@ preview/
 node_modules/
 .DS_Store
 *.log
+
+# Publishing scratch: credentials, tarballs and local env never belong here.
+.npmrc
+*.tgz
+.env
+.env.*

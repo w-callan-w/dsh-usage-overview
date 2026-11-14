@@ -1,10 +1,14 @@
 import { createRequire } from 'node:module';
 import { existsSync, readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 
-const runtimeDir = 'D:\\Programs\\DeepSeek Harness\\resources\\app.asar\\dsh';
-const projectDir = join(process.env.DSH_HOME ?? 'C:\\Users\\lzf\\.dsh', 'profiles', 'desktop');
-const extractedRuntime = 'D:\\Programs\\DeepSeek Harness\\.dsh-analysis\\asar\\extracted\\dsh';
+const appRoot =
+  process.env.DSH_APP_ROOT ??
+  join(process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local'), 'Programs', 'DeepSeek Harness');
+const runtimeDir = join(appRoot, 'resources', 'app.asar', 'dsh');
+const projectDir = join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'profiles', 'desktop');
+const extractedRuntime = join(appRoot, '.dsh-analysis', 'asar', 'extracted', 'dsh');
 const probeRuntime = existsSync(join(runtimeDir, 'node_modules')) ? runtimeDir : extractedRuntime;
 const installAnchor = join(probeRuntime, 'node_modules', '@deepseek-ai', 'dsh', 'package.json');
 

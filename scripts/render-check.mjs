@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
@@ -110,7 +111,7 @@ function walk(node, out) {
   for (const child of node.children ?? []) walk(child, out);
 }
 
-const home = process.env.DSH_HOME ?? 'C:\\Users\\lzf\\.dsh';
+const home = process.env.DSH_HOME ?? join(homedir(), '.dsh');
 const sessions = await collectSessions(home);
 const usage = buildUsageDocument(sessions, {
   now: Date.now(),

@@ -1,9 +1,10 @@
 import { readFile, stat } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import vm from 'node:vm';
 
 const installed = join(
-  process.env.DSH_HOME ?? 'C:\\Users\\lzf\\.dsh',
+  process.env.DSH_HOME ?? join(homedir(), '.dsh'),
   'profiles',
   'desktop',
   'node_modules',
@@ -51,7 +52,7 @@ const fakeCtx = {
 };
 host.apply(fakeCtx);
 check('host mounts the stats route', mounted.includes('/plugins/dsh-usage-overview/stats'), mounted.join(', '));
-check('host mounts the session route', mounted.includes('/plugins/dsh-usage-overview/session'));
+check('host no longer mounts the session route', !mounted.includes('/plugins/dsh-usage-overview/session'));
 
 const clientPath = join(installed, manifest.exports['./client']);
 const clientSource = await readFile(clientPath, 'utf8');

@@ -2,7 +2,7 @@
   "name": "dsh-usage-overview",
   "displayName": "DSH Usage Overview",
   "description": "A usage overview for DeepSeek Harness: token totals, activity heatmap, daily token and cache trends, and per-model attribution.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "w-callan-w",
   "repository": {
     "type": "git",
@@ -30,7 +30,7 @@
     "lib",
     "cordis.patch.yml",
     "README.md",
-    "README.zh-CN.md"
+    "README.en.md"
   ],
   "license": "MIT",
   "dsh": {
