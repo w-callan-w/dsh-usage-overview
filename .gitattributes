@@ -1,0 +1,9 @@
+# The plugin is loaded by Node and by the harness's own YAML reader, so the
+# committed bytes must be exactly what the build produced. Without this, Git's
+# autocrlf would rewrite line endings on checkout and the `lib/` bundle would no
+# longer match its recorded revision.
+* text=auto eol=lf
+
+# Screenshots are binary.
+*.png binary
+*.jpg binary
