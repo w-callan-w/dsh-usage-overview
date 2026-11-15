@@ -6,7 +6,7 @@ import vm from 'node:vm';
 
 import { buildUsageDocument, collectSessions } from '../lib/usage.js';
 import { CSS } from '../src/client/styles.js';
-import { formatDuration, formatTokensZh, PROVIDER_SOURCE_LABELS } from '../lib/protocol.js';
+import { formatTokensZh, PROVIDER_SOURCE_LABELS } from '../lib/protocol.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 

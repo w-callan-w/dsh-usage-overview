@@ -10,8 +10,8 @@ cache-hit-rate trends, and a per-model breakdown with a stacked day/week chart.
 
 ## Features
 
-- **Headline metrics** — total tokens, peak day, longest chat, current and
-  longest streaks, and prompt-cache hit rate.
+- **Headline metrics** — total tokens, peak day, daily average over active days,
+  current and longest streaks, and prompt-cache hit rate.
 - **Token activity** — a year of daily usage as a Sunday-aligned heatmap with
   five intensity levels.
 - **Daily token trend** — one smoothed line per provider route, with a shared

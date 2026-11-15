@@ -3,7 +3,6 @@ import { createElement as h, useCallback, useEffect, useMemo, useRef, useState }
 import {
   RANGE_PRESETS,
   USAGE_STATS_PATH,
-  formatDuration,
   formatPercent,
   formatTokensZh,
   isUsageDocument,
@@ -269,8 +268,12 @@ export function UsageDashboard() {
                       : `用量最高的一天：${document_.totals.peakDay}`,
                 }),
                 h(StatCard, {
-                  value: formatDuration(document_?.totals.longestSessionMs ?? 0),
-                  label: '最长聊天时长',
+                  value: formatTokensZh(document_?.totals.averageTokensPerActiveDay ?? 0),
+                  label: '日均 Token 数',
+                  title:
+                    (document_?.totals.activeDays ?? 0) > 0
+                      ? `按 ${String(document_.totals.activeDays)} 个活跃日计算`
+                      : '这个范围内还没有用量记录',
                 }),
                 h(StatCard, {
                   value: `${String(document_?.totals.currentStreak ?? 0)} 天`,

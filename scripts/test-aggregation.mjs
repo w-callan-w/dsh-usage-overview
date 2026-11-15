@@ -134,16 +134,31 @@ const labels = { 'workbuddy-ai': 'WorkBuddy AI', 'opencode-go': 'OpenCode Go' };
   const now = Date.UTC(2026, 9, 20, 12);
   const sessions = [
     {
-      id: 'long',
-      byDay: new Map([['2026-10-19', day([{ provider: 'p', model: 'm', outputTokens: 1, uncachedInputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }])]]),
+      id: 'two-days',
+      byDay: new Map([
+        ['2026-10-19', day([{ provider: 'p', model: 'm', outputTokens: 3, uncachedInputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }])],
+        ['2026-10-18', day([{ provider: 'p', model: 'm', outputTokens: 1, uncachedInputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }])],
+      ]),
       byModel: new Map(),
-      totals: { uncachedInputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 1 },
+      totals: { uncachedInputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 4 },
       wallMs: 3600000,
-      sessionStats: { turns: 1, steps: 1, llmMs: 60000, toolMs: 0 },
     },
   ];
   const doc = buildUsageDocument(sessions, { now, rangeDays: 30, providerLabels: labels, liveIds: new Set() });
-  check('longest duration uses the wall-clock span', doc.totals.longestSessionMs === 3600000, `got ${String(doc.totals.longestSessionMs)}`);
+  check('active days counts the days that carry usage', doc.totals.activeDays === 2, `got ${String(doc.totals.activeDays)}`);
+  check(
+    'daily average spreads the total over active days',
+    doc.totals.averageTokensPerActiveDay === 2,
+    `got ${String(doc.totals.averageTokensPerActiveDay)}`,
+  );
+  check('no wall-clock duration metric is published', doc.totals.longestSessionMs === undefined);
+}
+
+{
+  const now = Date.UTC(2026, 9, 20, 12);
+  const doc = buildUsageDocument([], { now, rangeDays: 30, providerLabels: labels, liveIds: new Set() });
+  check('an empty corpus reports no active days', doc.totals.activeDays === 0, `got ${String(doc.totals.activeDays)}`);
+  check('an empty corpus reports a zero daily average', doc.totals.averageTokensPerActiveDay === 0);
 }
 
 {

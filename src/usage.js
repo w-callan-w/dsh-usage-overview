@@ -223,7 +223,6 @@ export function buildUsageDocument(sessions, options) {
 
   const totals = emptyTotals();
   let peakSessionTokens = 0;
-  let longestSessionMs = 0;
   let turns = 0;
   let steps = 0;
 
@@ -241,8 +240,6 @@ export function buildUsageDocument(sessions, options) {
       const sessionTotal = totalOf(session.totals);
       if (sessionTotal > peakSessionTokens) peakSessionTokens = sessionTotal;
     }
-    const span = session.wallMs ?? session.sessionStats?.llmMs ?? 0;
-    if (span > longestSessionMs) longestSessionMs = span;
     turns += session.turns ?? session.sessionStats?.turns ?? 0;
     steps += session.steps ?? session.sessionStats?.steps ?? 0;
   }
@@ -348,6 +345,8 @@ export function buildUsageDocument(sessions, options) {
   const { current: currentStreak, longest: longestStreak } = streaks(activeDays, now);
 
   const grandTotal = totalOf(totals);
+  const activeDayCount = activeDays.length;
+  const averageTokensPerActiveDay = activeDayCount === 0 ? 0 : Math.round(grandTotal / activeDayCount);
 
   const peakDay = days.reduce(
     (best, day) => (day.total > best.total ? { total: day.total, day: day.day } : best),
@@ -371,7 +370,8 @@ export function buildUsageDocument(sessions, options) {
       peakDayTokens: peakDay.total,
       peakDay: peakDay.day,
       peakSessionTokens,
-      longestSessionMs,
+      activeDays: activeDayCount,
+      averageTokensPerActiveDay,
       turns,
       steps,
       currentStreak,
