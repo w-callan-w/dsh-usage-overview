@@ -21,10 +21,6 @@
   和图表都会随可用空间连续调整。
 - **浅色/深色主题**：颜色来自 DSH 主题 Token；提示气泡使用自身深色表面的专用前景色。
 
-| 桌面 | 手机（390px） |
-|---|---|
-| ![桌面](docs/dashboard.png) | ![手机](docs/dashboard-mobile.png) |
-
 ## 安装
 
 本插件是一个 DSH Bundle，需要宿主提供 `webServer` 服务。

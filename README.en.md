@@ -27,10 +27,6 @@ cache-hit-rate trends, and a per-model breakdown with a stacked day/week chart.
 - **Light and dark themes** — colours come from DSH theme tokens, including the
   tooltip's own dark-surface label token.
 
-| Desktop | Phone (390px) |
-|---|---|
-| ![Desktop](docs/dashboard.png) | ![Phone](docs/dashboard-mobile.png) |
-
 ## Install
 
 The plugin is a DSH bundle. It needs a harness build that provides the

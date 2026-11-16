@@ -188,7 +188,6 @@ export const CSS = `.dus-root {
   margin-top: 10px; font-size: 11px; color: var(--dsw-alias-label-secondary);
 }
 .dus-heat-legend .dus-heat-cell { width: 10px; height: 10px; }
-.dus-heat-hint { margin-right: auto; color: var(--dsw-alias-label-secondary); }
 
 .dus-tip {
   position: fixed; z-index: 60; pointer-events: none;
@@ -325,7 +324,6 @@ export const CSS = `.dus-root {
   gap: 4px 10px; min-width: 0; flex: 1 1 200px;
 }
 .dus-bars-title { font-size: 13.5px; font-weight: 600; margin: 0; line-height: 1.3; }
-.dus-bars-note { font-size: 11px; color: var(--dsw-alias-label-secondary); }
 .dus-trend-toggle { margin-left: auto; flex: none; }
 .dus-seg-sm .dus-seg-btn { padding: 3px 10px; font-size: 11px; }
 

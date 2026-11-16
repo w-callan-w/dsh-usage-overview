@@ -305,7 +305,6 @@ export function TokenHeatmap({ days, rangeDays, now }) {
     h(
       'div',
       { className: 'dus-heat-legend' },
-      scrollable ? h('span', { className: 'dus-heat-hint' }, '← 左右滑动 →') : null,
       h('span', null, '少'),
       ...[0, 1, 2, 3, 4].map((level) =>
         h('div', { key: `l-${String(level)}`, className: 'dus-heat-cell', 'data-level': String(level), style: { width: '10px', height: '10px' } }),
@@ -1065,7 +1064,6 @@ export function ModelUsageChart({ days, models, rangeDays }) {
           'div',
           { className: 'dus-bars-heading' },
           h('h3', { className: 'dus-bars-title' }, '各模型用量趋势'),
-          h('span', { className: 'dus-bars-note' }, '堆叠高度 = Token 总量 · 颜色对应上方模型'),
         ),
         h(
           'div',
