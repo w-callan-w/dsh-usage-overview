@@ -3,13 +3,19 @@
 [English](README.en.md)
 
 一款 DeepSeek Harness 的用量总览面板插件。插件直接读取 Harness 自身的会话记录，
-展示 Token 总量、全年活跃热力图、每日 Token 与缓存命中率趋势，以及按模型拆分的
-用量构成和按日/按周堆叠图。
+展示实时 Token 消耗、Token 总量、全年活跃热力图、每日 Token 与缓存命中率趋势，以及
+按模型拆分的用量构成和按日/按周堆叠图。
 
 [GitHub](https://github.com/w-callan-w/dsh-usage-overview) · [Gitee](https://gitee.com/callanjones/deep-seek-harness-usage-plugin) · [npm](https://www.npmjs.com/package/dsh-usage-overview)
 
 ## 功能
 
+- **实时 Token 消耗**：以分钟为单位统计真实消耗。统计卡里「日均 Token 数」后面有一张
+  「实时 Token / 分钟」卡片，只显示最近 60 秒的速率；页面最后的实时面板只保留左上角的
+  速率数字和最近 60 分钟的每分钟柱状图（没有其他汇总文字），悬停可看该分钟的合计、
+  Top 模型与调用次数。
+- **自动刷新**：打开面板后默认每 5 秒自动更新实时数据（可选 5/10/30/60 秒或关闭），
+  同时保留手动 **刷新** 按钮；页面隐藏时暂停轮询，切回面板会立即刷新一次。
 - **头部指标**：累计 Token、单日峰值、日均 Token（按活跃日）、当前/最长连续天数、缓存命中率。
 - **Token 活动**：最近一年的每日用量热力图，周日对齐，五级强度。
 - **每日 Token 趋势**：每个 Provider 路由一条平滑曲线，共享十字准线，图例显示各自合计。
@@ -66,6 +72,11 @@ Desktop 版本只在启动时组装一次 Profile，运行中修改文件不会�
 
 在侧边栏打开 **用量统计**。
 
+- 面板顶部的工具栏左侧是 **关闭 / 5秒 / 10秒 / 30秒 / 60秒** 刷新节奏选择，
+  选择会保存在本机，下次打开仍然生效；**刷新** 按钮在右侧，始终可用，
+  会同时更新实时数据和历史统计。
+- **实时 Token 消耗** 卡片与面板只受自动刷新驱动，不受时间范围控件影响；
+  最近 60 分钟的每一分钟都有一根柱子，悬停可看该分钟的合计、Top 模型和调用次数。
 - 时间范围控制头部指标、每日 Token 趋势、缓存命中率图以及模型用量趋势。
 - Token 活动始终绘制全年网格，时间范围不会改变它的窗口。
 - 悬停图表可查看对应日期/周的精确数据。
@@ -86,6 +97,11 @@ Desktop 版本只在启动时组装一次 Profile，运行中修改文件不会�
 4. **实时会话服务**：`ctx.sessions.list()` 与
    `ctx.sessionProjections.snapshot(session)` 让正在运行的会话立即计入统计。
 
+每条 assistant 消息都带有 `time` 和 Provider 用量，因此可以按分钟落桶：最近 3 小时的
+分钟桶与样本事件会在折叠日志时保留，实时接口据此给出滚动 60 秒、5 分钟、15 分钟和
+整个窗口的消耗量，以及每分钟的模型构成。正在运行的会话同样会写入会话日志，
+所以它的消耗会出现在当前分钟里。
+
 缓存读取按计费 Token 计入。缓存命中率公式：
 
 ```text
@@ -101,6 +117,7 @@ cacheRead / (cacheRead + cacheWrite + uncachedInput)
 | 路由 | 用途 |
 |---|---|
 | `GET /plugins/dsh-usage-overview/stats?range=7d\|30d\|90d\|all` | 聚合后的看板数据 |
+| `GET /plugins/dsh-usage-overview/realtime?minutes=60` | 按分钟的实时用量（分钟桶 + 滚动窗口速率），`minutes` 取值 5–240 |
 
 来自本机回环地址的请求会被接受；经过 DSH 会话认证的远程请求同样会被接受，因此
 手机通过远程隧道访问时无需把接口暴露给匿名调用者。
@@ -131,6 +148,13 @@ node scripts/build.mjs
 | `node scripts/responsive-check.mjs [origin]` | 七种宽度、实时缩放、浅色/深色对比度、截图 |
 | `node scripts/verify-install.mjs` | 已安装 Profile 的清单、导出、路由与信任校验 |
 | `node scripts/verify-live.mjs [origin]` | 运行中的宿主确实提供路由和 Bundle |
+| `node tests/unit-realtime.mjs` | 分钟桶、滚动窗口、窗口边界、空数据与时钟偏斜 |
+| `node tests/host-integration.mjs` | 在临时 HTTP 服务上挂载真实路由，并与独立重算的日志数据比对 |
+| `node tests/render.mjs` | 在 jsdom + React 中渲染看板，验证实时面板、自动刷新、手动刷新与降级路径 |
+| `node tests/css.mjs` | 内嵌样式表的括号平衡、可解析性与关键规则 |
+
+`tests/` 下的检查需要先 `npm install`（会装上仅用于测试的 `react`、`react-dom`、`jsdom`）。
+`host-integration.mjs` 读取 `$DSH_HOME/sessions` 里的真实会话日志，其余不需要宿主运行。
 
 `responsive-check.mjs` 与 `verify-live.mjs` 需要宿主正在运行；如果端口不是默认的
 `http://127.0.0.1:50494`，请把实际地址作为参数传入。
@@ -143,7 +167,8 @@ node scripts/build.mjs
 
 颜色使用 DSH 的 `--dsw-*` 主题 Token。提示气泡在浅色和深色主题下都是深色表面，
 因此使用 `--dsw-alias-tooltip-label`；小号标签和图表坐标轴使用对比度更高的
-Secondary 文本 Token。`responsive-check.mjs` 的主题检查会强制最低对比度不低于 4.5:1。
+Secondary 文本 Token。实时面板的柱子用 `--dus-live-bar`，当前这一分钟用
+`--dus-live-bar-current` 区分。`responsive-check.mjs` 的主题检查会强制最低对比度不低于 4.5:1。
 
 ## 许可证
 

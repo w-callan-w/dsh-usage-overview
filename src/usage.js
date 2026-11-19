@@ -2,7 +2,18 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { foldSessionLog } from './log-fold.js';
-import { PANEL_ID, USAGE_SCHEMA_VERSION, cacheHitRate } from './protocol.js';
+import {
+  MINUTE_MS,
+  PANEL_ID,
+  REALTIME_MAX_WINDOW_MINUTES,
+  REALTIME_MIN_WINDOW_MINUTES,
+  REALTIME_SCHEMA_VERSION,
+  REALTIME_WINDOW_MINUTES,
+  USAGE_SCHEMA_VERSION,
+  cacheHitRate,
+  clampNumber,
+  minuteStartOf,
+} from './protocol.js';
 
 function emptyTotals() {
   return {
@@ -134,6 +145,8 @@ export async function collectSessions(home) {
       totals: folded.totals,
       byDay: folded.byDay,
       byModel: folded.byModel,
+      minutes: folded.minutes,
+      recent: folded.recent,
       wallMs: folded.wallMs,
       turns: folded.turns,
       steps: folded.steps,
@@ -167,6 +180,8 @@ export async function collectSessions(home) {
       totals: hasLogFigures ? existing.totals : folded.totals,
       byDay: existing?.byDay ?? new Map(),
       byModel: existing?.byModel ?? new Map(),
+      minutes: existing?.minutes,
+      recent: existing?.recent,
       sessionStats: folded.sessionStats,
       title: folded.title,
       wallMs: existing?.wallMs,
@@ -386,8 +401,172 @@ export function buildUsageDocument(sessions, options) {
   };
 }
 
-function localDayKey(ms) {
-  const date = new Date(ms);
+function sampleValue(sample, key) {
+  const value = sample?.[key];
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+/**
+ * Build the realtime document: one bucket per minute across the window, plus
+ * exact rolling-window rates computed from the retained samples and the model
+ * breakdown of the same events. Only samples inside the window count, so a
+ * cached fold from an earlier request never leaks stale minutes.
+ */
+export function buildRealtimeDocument(sessions, options) {
+  const now = typeof options?.now === 'number' ? options.now : Date.now();
+  const windowMinutes = Math.round(
+    clampNumber(
+      typeof options?.windowMinutes === 'number' ? options.windowMinutes : REALTIME_WINDOW_MINUTES,
+      REALTIME_MIN_WINDOW_MINUTES,
+      REALTIME_MAX_WINDOW_MINUTES,
+    ),
+  );
+
+  const bucketMs = MINUTE_MS;
+  const currentStart = minuteStartOf(now, bucketMs);
+  const endExclusive = currentStart + bucketMs;
+  const firstStart = currentStart - (windowMinutes - 1) * bucketMs;
+
+  const buckets = new Map();
+  for (let start = firstStart; start <= currentStart; start += bucketMs) {
+    buckets.set(start, { total: 0, totals: emptyTotals(), calls: 0, sessions: new Set(), routes: new Map() });
+  }
+
+  const samples = [];
+  const models = new Map();
+  let activeSessions = 0;
+
+  for (const session of sessions) {
+    const recent = Array.isArray(session?.recent) ? session.recent : [];
+    if (recent.length === 0) continue;
+    const sessionKey = typeof session.id === 'string' && session.id.length > 0 ? session.id : `#${String(activeSessions)}`;
+    let touched = false;
+
+    for (const sample of recent) {
+      const at = typeof sample?.at === 'number' ? sample.at : undefined;
+      if (at === undefined || at < firstStart || at >= endExclusive) continue;
+      const total = sampleValue(sample, 'total');
+      if (total <= 0) continue;
+
+      touched = true;
+      const start = minuteStartOf(at, bucketMs);
+      const entry = buckets.get(start);
+      const routeKey = `${sample.provider}\u0000${sample.model}`;
+      if (entry !== undefined) {
+        entry.total += total;
+        entry.totals.uncachedInputTokens += sampleValue(sample, 'uncachedInputTokens');
+        entry.totals.cacheReadTokens += sampleValue(sample, 'cacheReadTokens');
+        entry.totals.cacheWriteTokens += sampleValue(sample, 'cacheWriteTokens');
+        entry.totals.outputTokens += sampleValue(sample, 'outputTokens');
+        entry.calls += 1;
+        entry.sessions.add(sessionKey);
+        entry.routes.set(routeKey, (entry.routes.get(routeKey) ?? 0) + total);
+      }
+
+      samples.push({ at, total });
+      const model = models.get(routeKey) ?? {
+        provider: sample.provider,
+        model: sample.model,
+        total: 0,
+      };
+      model.total += total;
+      models.set(routeKey, model);
+    }
+
+    if (touched) activeSessions += 1;
+  }
+
+  const ordered = [];
+  for (let start = firstStart; start <= currentStart; start += bucketMs) {
+    const entry = buckets.get(start);
+    ordered.push({
+      start,
+      end: start + bucketMs,
+      total: entry.total,
+      uncachedInputTokens: entry.totals.uncachedInputTokens,
+      cacheReadTokens: entry.totals.cacheReadTokens,
+      cacheWriteTokens: entry.totals.cacheWriteTokens,
+      outputTokens: entry.totals.outputTokens,
+      calls: entry.calls,
+      sessions: entry.sessions.size,
+      routes: Object.fromEntries(entry.routes),
+    });
+  }
+
+  samples.sort((a, b) => a.at - b.at);
+  const suffix = new Float64Array(samples.length + 1);
+  for (let index = samples.length - 1; index >= 0; index -= 1) {
+    suffix[index] = suffix[index + 1] + samples[index].total;
+  }
+
+  const rollingTotal = (ms) => {
+    const threshold = now - ms;
+    let low = 0;
+    let high = samples.length;
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      if (samples[middle].at <= threshold) low = middle + 1;
+      else high = middle;
+    }
+    return suffix[low];
+  };
+
+  const last1m = rollingTotal(bucketMs);
+  const last5m = rollingTotal(5 * bucketMs);
+  const last15m = rollingTotal(15 * bucketMs);
+  const lastWindow = rollingTotal(windowMinutes * bucketMs);
+
+  const totals = { last1m, last5m, last15m, lastWindow };
+  const currentMinute = ordered[ordered.length - 1].total;
+  const previousMinute = ordered.length > 1 ? ordered[ordered.length - 2].total : 0;
+
+  let peakMinute = 0;
+  let peakStart = null;
+  for (const bucket of ordered) {
+    if (bucket.start >= currentStart) continue;
+    if (bucket.total > peakMinute) {
+      peakMinute = bucket.total;
+      peakStart = bucket.start;
+    }
+  }
+
+  const modelRows = [...models.values()]
+    .sort((left, right) => right.total - left.total)
+    .slice(0, 8)
+    .map((entry) => ({
+      ...entry,
+      key: `${entry.provider}/${entry.model}`,
+      share: lastWindow > 0 ? (entry.total / lastWindow) * 100 : 0,
+    }));
+
+  return {
+    schemaVersion: REALTIME_SCHEMA_VERSION,
+    kind: 'usage-realtime',
+    generatedAt: now,
+    bucketMs,
+    windowMinutes,
+    window: { start: firstStart, end: endExclusive },
+    buckets: ordered,
+    rate: {
+      currentMinute,
+      previousMinute,
+      rollingMinute: last1m,
+      averagePerMinute5: last5m / 5,
+      averagePerMinute15: last15m / 15,
+      averagePerMinuteWindow: lastWindow / windowMinutes,
+      peakMinute,
+      peakStart,
+      lastSampleAt: samples.length > 0 ? samples[samples.length - 1].at : null,
+    },
+    totals,
+    activity: {
+      sessions: activeSessions,
+      models: modelRows,
+    },
+  };
+}
+
+function localDayKey(ms) {  const date = new Date(ms);
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${String(date.getFullYear())}-${month}-${day}`;

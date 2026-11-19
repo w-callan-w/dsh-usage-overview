@@ -8,7 +8,7 @@ const HEATMAP_DAYS = 365;
 
 const FALLBACK_CHART_WIDTH = 920;
 
-function useMeasuredWidth(fallback = FALLBACK_CHART_WIDTH) {
+export function useMeasuredWidth(fallback = FALLBACK_CHART_WIDTH) {
   const [width, setWidth] = useState(fallback);
   const host = useRef(null);
 
@@ -170,7 +170,7 @@ function levelOf(total, peak) {
   return 4;
 }
 
-function Tooltip({ anchor, title, rows }) {
+export function Tooltip({ anchor, title, rows }) {
   if (anchor === null) return null;
   const style = {
     left: `${String(Math.min(anchor.x + 14, window.innerWidth - 280))}px`,
@@ -595,18 +595,6 @@ export function TokenCacheRate({ days, rangeDays }) {
       ),
     !empty &&
       h(
-        'div',
-        { className: 'dus-legend' },
-        h(
-          'div',
-          { className: 'dus-legend-item' },
-          h('span', { className: 'dus-legend-dot', style: { background: color } }),
-          h('span', null, '每日命中率'),
-          h('span', { className: 'dus-legend-val' }, `纵轴 ${String(plot.low)}–100%`),
-        ),
-      ),
-    !empty &&
-      h(
         'svg',
         {
           key: 'chart',
@@ -757,7 +745,7 @@ function smoothPath(points) {
   return path;
 }
 
-function pointerToViewBox(svg, clientX, clientY) {
+export function pointerToViewBox(svg, clientX, clientY) {
   const ctm = typeof svg.getScreenCTM === 'function' ? svg.getScreenCTM() : null;
   if (ctm !== null && typeof svg.createSVGPoint === 'function') {
     const point = svg.createSVGPoint();
@@ -781,7 +769,7 @@ function pointerToViewBox(svg, clientX, clientY) {
   };
 }
 
-function viewBoxToClient(svg, x, y) {
+export function viewBoxToClient(svg, x, y) {
   const ctm = typeof svg.getScreenCTM === 'function' ? svg.getScreenCTM() : null;
   if (ctm !== null && typeof svg.createSVGPoint === 'function') {
     const point = svg.createSVGPoint();

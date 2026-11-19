@@ -1,10 +1,32 @@
 export const USAGE_SCHEMA_VERSION = 1;
 
+export const REALTIME_SCHEMA_VERSION = 1;
+
 export const PANEL_ID = 'usage-overview';
 
 export const NS = 'usage-overview';
 
 export const USAGE_STATS_PATH = '/plugins/dsh-usage-overview/stats';
+
+export const USAGE_REALTIME_PATH = '/plugins/dsh-usage-overview/realtime';
+
+/** One realtime bucket spans one minute. */
+export const MINUTE_MS = 60000;
+
+/** Default realtime window, and the hard bounds the route clamps to. */
+export const REALTIME_WINDOW_MINUTES = 60;
+export const REALTIME_MIN_WINDOW_MINUTES = 5;
+export const REALTIME_MAX_WINDOW_MINUTES = 240;
+
+/** Auto-refresh cadences the panel offers; the first one is the default. */
+export const REFRESH_INTERVALS = Object.freeze([
+  { id: '5s', ms: 5000 },
+  { id: '10s', ms: 10000 },
+  { id: '30s', ms: 30000 },
+  { id: '60s', ms: 60000 },
+]);
+
+export const DEFAULT_REFRESH_INTERVAL_MS = 5000;
 
 
 export const RANGE_PRESETS = Object.freeze([
@@ -61,6 +83,51 @@ export function isUsageDocument(value) {
   if (!Array.isArray(value.days)) return false;
   if (!Array.isArray(value.models)) return false;
   return true;
+}
+
+/**
+ * The realtime document is a fixed-length list of one-minute buckets plus the
+ * rolling rates derived from the same events. The panel tolerates a missing
+ * realtime payload, so validation only rejects a document it cannot trust.
+ */
+export function isRealtimeDocument(value) {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  if (value.schemaVersion !== REALTIME_SCHEMA_VERSION) return false;
+  if (typeof value.generatedAt !== 'number') return false;
+  if (typeof value.bucketMs !== 'number' || value.bucketMs <= 0) return false;
+  if (!Array.isArray(value.buckets)) return false;
+  if (!value.buckets.every((bucket) => typeof bucket?.start === 'number' && typeof bucket?.total === 'number')) {
+    return false;
+  }
+  if (typeof value.rate !== 'object' || value.rate === null) return false;
+  if (typeof value.totals !== 'object' || value.totals === null) return false;
+  return true;
+}
+
+export function clampNumber(value, min, max) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return min;
+  return Math.min(max, Math.max(min, value));
+}
+
+/** Minute-aligned start of the bucket containing `ms`. */
+export function minuteStartOf(ms, bucketMs = MINUTE_MS) {
+  return Math.floor(ms / bucketMs) * bucketMs;
+}
+
+/** Local `HH:MM` label for a bucket start. */
+export function minuteLabel(ms) {
+  const date = new Date(ms);
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+/** Local `HH:MM:SS` label for an instant. */
+export function clockLabel(ms) {
+  const date = new Date(ms);
+  return [
+    String(date.getHours()).padStart(2, '0'),
+    String(date.getMinutes()).padStart(2, '0'),
+    String(date.getSeconds()).padStart(2, '0'),
+  ].join(':');
 }
 
 export function formatTokens(value) {

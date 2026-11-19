@@ -1,15 +1,34 @@
 import { createElement as h, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
+  DEFAULT_REFRESH_INTERVAL_MS,
+  MINUTE_MS,
   RANGE_PRESETS,
+  REALTIME_WINDOW_MINUTES,
+  REFRESH_INTERVALS,
+  USAGE_REALTIME_PATH,
   USAGE_STATS_PATH,
   formatPercent,
   formatTokensZh,
+  isRealtimeDocument,
   isUsageDocument,
+  minuteLabel,
 } from '../protocol.js';
-import { ModelDonut, ModelUsageChart, TokenCacheRate, TokenHeatmap, TokenTrend } from './charts.js';
+import {
+  ModelDonut,
+  ModelUsageChart,
+  TokenCacheRate,
+  TokenHeatmap,
+  TokenTrend,
+  Tooltip,
+  pointerToViewBox,
+  useMeasuredWidth,
+  viewBoxToClient,
+} from './charts.js';
 
 const POLL_INTERVAL_MS = 30000;
+
+const AUTO_REFRESH_STORAGE_KEY = 'dsh-usage-overview/auto-refresh';
 
 // Headline stat cards show two decimal places (e.g. 53.80亿).
 function formatStatTokens(value) {
@@ -33,11 +52,64 @@ async function fetchUsage({ range, signal }) {
   return body;
 }
 
-function useUsageDocument() {
+async function fetchRealtime({ windowMinutes, signal }) {
+  const response = await fetch(
+    `${USAGE_REALTIME_PATH}?minutes=${encodeURIComponent(String(windowMinutes))}`,
+    {
+      method: 'GET',
+      credentials: 'same-origin',
+      headers: { accept: 'application/json' },
+      signal,
+    },
+  );
+  if (!response.ok) throw new Error(`HTTP ${String(response.status)}`);
+  const body = await response.json();
+  if (!isRealtimeDocument(body)) throw new Error('malformed realtime document');
+  return body;
+}
+
+// Pause only when the page explicitly reports itself hidden, so a host that never
+// reports visibility still keeps refreshing.
+function pageHidden() {
+  try {
+    return document.visibilityState === 'hidden';
+  } catch {
+    return false;
+  }
+}
+
+function readAutoRefresh() {
+  const fallback = { enabled: true, intervalMs: DEFAULT_REFRESH_INTERVAL_MS };
+  try {
+    const raw = window.localStorage.getItem(AUTO_REFRESH_STORAGE_KEY);
+    if (raw === null) return fallback;
+    const parsed = JSON.parse(raw);
+    const known = REFRESH_INTERVALS.some((item) => item.ms === parsed?.intervalMs);
+    return {
+      enabled: parsed?.enabled !== false,
+      intervalMs: known ? parsed.intervalMs : fallback.intervalMs,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function writeAutoRefresh(preference) {
+  try {
+    window.localStorage.setItem(AUTO_REFRESH_STORAGE_KEY, JSON.stringify(preference));
+  } catch {
+  }
+}
+
+function useUsageDashboard() {
   const [rangeId, setRangeId] = useState('30d');
   const [state, setState] = useState({ status: 'loading', document: null, error: null });
+  const [live, setLive] = useState({ status: 'loading', data: null, error: null, updatedAt: null });
+  const [auto, setAutoState] = useState(readAutoRefresh);
   const [reloadToken, setReloadToken] = useState(0);
-  const inFlight = useRef(null);
+  const [liveToken, setLiveToken] = useState(0);
+  const inFlight = useRef(false);
+  const lastDocumentAt = useRef(0);
 
   const range = useMemo(() => {
     const preset = RANGE_PRESETS.find((item) => item.id === rangeId);
@@ -53,6 +125,7 @@ function useUsageDocument() {
       try {
         const document = await fetchUsage({ range, signal: controller.signal });
         if (!active) return;
+        lastDocumentAt.current = Date.now();
         setState({ status: 'ready', document, error: null });
       } catch (error) {
         if (!active || controller.signal.aborted) return;
@@ -70,27 +143,88 @@ function useUsageDocument() {
     };
   }, [range, reloadToken]);
 
+  // The realtime payload is small and always fetched for the current minute, so it
+  // is what every automatic and manual refresh updates first.
   useEffect(() => {
-    const tick = () => {
-      if (document.visibilityState !== 'visible') return;
-      setReloadToken((value) => value + 1);
+    const controller = new AbortController();
+    let active = true;
+    setLive((previous) => ({ ...previous, status: previous.data === null ? 'loading' : 'refreshing' }));
+
+    void (async () => {
+      try {
+        const data = await fetchRealtime({
+          windowMinutes: REALTIME_WINDOW_MINUTES,
+          signal: controller.signal,
+        });
+        if (!active) return;
+        setLive({ status: 'ready', data, error: null, updatedAt: Date.now() });
+      } catch (error) {
+        if (!active || controller.signal.aborted) return;
+        setLive((previous) => ({
+          status: previous.data === null ? 'error' : 'stale',
+          data: previous.data,
+          error: error instanceof Error ? error.message : String(error),
+          updatedAt: previous.updatedAt,
+        }));
+      }
+    })();
+
+    return () => {
+      active = false;
+      controller.abort();
     };
-    const timer = window.setInterval(tick, POLL_INTERVAL_MS);
+  }, [liveToken]);
+
+  useEffect(() => {
+    if (!auto.enabled) return undefined;
+    const tick = () => {
+      if (pageHidden()) return;
+      setLiveToken((value) => value + 1);
+      if (Date.now() - lastDocumentAt.current >= Math.max(POLL_INTERVAL_MS, auto.intervalMs)) {
+        setReloadToken((value) => value + 1);
+      }
+    };
+    const timer = window.setInterval(tick, auto.intervalMs);
     return () => {
       window.clearInterval(timer);
     };
+  }, [auto.enabled, auto.intervalMs]);
+
+  // Returning to the panel should show current numbers immediately instead of
+  // waiting for the next tick.
+  useEffect(() => {
+    const onVisible = () => {
+      if (pageHidden()) return;
+      setLiveToken((value) => value + 1);
+      if (Date.now() - lastDocumentAt.current >= POLL_INTERVAL_MS) {
+        setReloadToken((value) => value + 1);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, []);
+
+  const setAuto = useCallback((next) => {
+    setAutoState((previous) => (typeof next === 'function' ? next(previous) : next));
+  }, []);
+
+  useEffect(() => {
+    writeAutoRefresh(auto);
+  }, [auto]);
 
   const refresh = useCallback(() => {
-    if (inFlight.current !== null) return;
+    if (inFlight.current) return;
     inFlight.current = true;
+    setLiveToken((value) => value + 1);
     setReloadToken((value) => value + 1);
     window.setTimeout(() => {
-      inFlight.current = null;
-    }, 600);
+      inFlight.current = false;
+    }, 500);
   }, []);
 
-  return { rangeId, setRangeId, range, state, refresh };
+  return { rangeId, setRangeId, range, state, live, auto, setAuto, refresh };
 }
 
 function StatCard({ value, label, title }) {
@@ -134,6 +268,291 @@ function CacheHitCard({ totals }) {
         { className: 'dus-meter', role: 'img', 'aria-label': `缓存命中率 ${formatPercent(rate)}` },
         h('div', { className: 'dus-meter-fill', style: { width: `${String(Math.min(100, rate))}%` } }),
       ),
+  );
+}
+
+function RealtimeCard({ live }) {
+  const data = live?.data ?? null;
+  const rate = data?.rate ?? null;
+  const detail =
+    rate === null
+      ? '正在读取实时用量…'
+      : [
+          `滚动 60 秒 ${formatTokensZh(rate.rollingMinute)} token`,
+          `本分钟 ${formatTokensZh(rate.currentMinute)}`,
+          `上分钟 ${formatTokensZh(rate.previousMinute)}`,
+          `近 5 分钟均值 ${formatTokensZh(rate.averagePerMinute5)}/分`,
+          `窗口峰值 ${formatTokensZh(rate.peakMinute)}/分`,
+        ].join(' · ');
+
+  return h(
+    'div',
+    { className: 'dus-card dus-card-live', title: detail },
+    h(
+      'div',
+      { className: 'dus-card-value dus-live-value' },
+      rate === null ? '—' : formatStatTokens(rate.rollingMinute),
+    ),
+    h('div', { className: 'dus-card-label' }, '实时 Token / 分钟'),
+  );
+}
+
+function RealtimeBars({ data, loading }) {
+  const [hoverIndex, setHoverIndex] = useState(null);
+  const [hoverAnchor, setHoverAnchor] = useState(null);
+  const { host, width } = useMeasuredWidth();
+
+  const height = Math.round(Math.max(150, Math.min(196, 108 + width * 0.1)));
+  const padTop = 10;
+  const padRight = 12;
+  const padBottom = 24;
+  const padLeft = Math.round(Math.max(34, Math.min(48, width * 0.05)));
+  const axisSize = Math.max(10, Math.min(11, 9.5 + width * 0.0015));
+
+  const plot = useMemo(() => {
+    const buckets = Array.isArray(data?.buckets) ? data.buckets : [];
+    const count = Math.max(1, buckets.length);
+    const usableWidth = Math.max(1, width - padLeft - padRight);
+    const usableHeight = Math.max(1, height - padTop - padBottom);
+    const peak = buckets.reduce((max, bucket) => Math.max(max, bucket.total ?? 0), 0);
+    const step = peak <= 1000 ? 100 : 10 ** Math.max(0, Math.floor(Math.log10(peak)) - 1);
+    const ceiling = Math.max(step, Math.ceil(peak / step) * step);
+    const slot = usableWidth / count;
+    const barWidth = Math.max(2, Math.min(16, slot * 0.66));
+
+    const bars = buckets.map((bucket, index) => {
+      const total = bucket.total ?? 0;
+      const scaled = total <= 0 ? 0 : Math.max(1.5, (total / ceiling) * usableHeight);
+      return {
+        key: String(bucket.start),
+        index,
+        start: bucket.start,
+        total,
+        x: padLeft + slot * index + (slot - barWidth) / 2,
+        width: barWidth,
+        y: padTop + usableHeight - scaled,
+        height: scaled,
+        routes: bucket.routes ?? {},
+        calls: bucket.calls ?? 0,
+        sessions: bucket.sessions ?? 0,
+      };
+    });
+
+    const gridLines = [0, 0.5, 1].map((ratio) => ({
+      y: padTop + usableHeight - usableHeight * ratio,
+      label: ratio === 0 ? '0' : formatTokensZh(Math.round(ceiling * ratio)),
+    }));
+
+    const ticks = [];
+    const stride = count <= 20 ? 5 : 10;
+    if (buckets.length > 0) {
+      for (let index = count - 1; index >= 0; index -= stride) {
+        const bucket = buckets[index];
+        if (bucket === undefined) continue;
+        ticks.push({ index, x: padLeft + slot * index + slot / 2, text: minuteLabel(bucket.start) });
+      }
+    }
+
+    return { buckets, bars, gridLines, ticks, slot, usableWidth, usableHeight, ceiling };
+  }, [data, width, height, padLeft, padRight, padTop, padBottom]);
+
+  const empty = plot.buckets.length === 0 || plot.bars.every((bar) => bar.total <= 0);
+  const hover = hoverIndex === null ? null : (plot.bars[hoverIndex] ?? null);
+  const hoverRows = [];
+  if (hover !== null) {
+    hoverRows.push(`合计 ${formatTokensZh(hover.total)} tokens`);
+    const routes = Object.entries(hover.routes)
+      .sort((left, right) => right[1] - left[1])
+      .slice(0, 3);
+    for (const [routeKey, total] of routes) {
+      const model = routeKey.split('\u0000')[1] ?? routeKey;
+      hoverRows.push(`${model}  ${formatTokensZh(total)} tokens`);
+    }
+    if (hover.calls > 0) hoverRows.push(`${String(hover.calls)} 次调用`);
+  }
+
+  return h(
+    'div',
+    { className: 'dus-chart-host dus-realtime-host', ref: host, 'data-chart': 'realtime' },
+    empty &&
+      h(
+        'div',
+        { className: 'dus-state dus-realtime-empty', style: { padding: '36px 0' } },
+        h(
+          'div',
+          { className: 'dus-state-desc' },
+          data !== null ? '最近 60 分钟没有 Token 消耗。' : loading ? '正在读取实时用量…' : '没有实时用量数据，正在重试…',
+        ),
+      ),
+    h(
+      'svg',
+      {
+        key: 'chart',
+        viewBox: `0 0 ${String(width)} ${String(height)}`,
+        width: '100%',
+        height: String(height),
+        role: 'img',
+        'aria-label': '每分钟 Token 消耗',
+        onMouseLeave: () => {
+          setHoverIndex(null);
+          setHoverAnchor(null);
+        },
+        onMouseMove: (event) => {
+          const svg = event.currentTarget;
+          const local = pointerToViewBox(svg, event.clientX, event.clientY);
+          if (plot.slot <= 0) return;
+          const index = Math.floor((local.x - padLeft) / plot.slot);
+          const clamped = Math.max(0, Math.min(plot.bars.length - 1, index));
+          setHoverIndex(clamped);
+          const bar = plot.bars[clamped];
+          if (bar.total > 0) {
+            const screen = viewBoxToClient(svg, bar.x + bar.width / 2, bar.y);
+            setHoverAnchor({ x: screen.x, y: screen.y });
+          } else {
+            setHoverAnchor({ x: event.clientX, y: event.clientY });
+          }
+        },
+      },
+      ...plot.gridLines.map((line, index) =>
+        h('line', {
+          key: `rg-${String(index)}`,
+          x1: String(padLeft),
+          x2: String(width - padRight),
+          y1: String(line.y),
+          y2: String(line.y),
+          stroke: 'var(--dsw-alias-border-l2)',
+          'stroke-width': '1',
+          'stroke-dasharray': index === 0 ? undefined : '3 5',
+        }),
+      ),
+      ...plot.gridLines.map((line, index) =>
+        h(
+          'text',
+          {
+            key: `rgl-${String(index)}`,
+            x: String(padLeft - 8),
+            y: String(line.y + 4),
+            'text-anchor': 'end',
+            fill: 'var(--dsw-alias-label-secondary)',
+            'font-size': String(axisSize),
+          },
+          line.label,
+        ),
+      ),
+      ...plot.bars.map((bar) =>
+        h('rect', {
+          key: bar.key,
+          x: String(bar.x),
+          y: String(bar.y),
+          width: String(bar.width),
+          height: String(Math.max(bar.height, bar.total > 0 ? 1.5 : 0)),
+          rx: '1.5',
+          fill: bar.index === plot.bars.length - 1 ? 'var(--dus-live-bar-current, #39c07a)' : 'var(--dus-live-bar, #4f8ef7)',
+          opacity: bar.total > 0 ? '1' : '0.18',
+          className: 'dus-live-bar',
+        }),
+      ),
+      ...plot.ticks.map((tick) =>
+        h(
+          'text',
+          {
+            key: `rt-${String(tick.index)}`,
+            x: String(tick.x),
+            y: String(height - 8),
+            'text-anchor': 'middle',
+            fill: 'var(--dsw-alias-label-secondary)',
+            'font-size': String(axisSize),
+          },
+          tick.text,
+        ),
+      ),
+      hover !== null &&
+        h('rect', {
+          x: String(padLeft + plot.slot * hover.index),
+          y: String(padTop),
+          width: String(Math.max(1, plot.slot)),
+          height: String(plot.usableHeight),
+          fill: 'var(--dsw-alias-bg-layer-3)',
+          opacity: '0.4',
+          rx: '2',
+        }),
+    ),
+    hover !== null &&
+      h(Tooltip, {
+        key: 'tip',
+        anchor: hoverAnchor ?? { x: 0, y: 0 },
+        title: `${minuteLabel(hover.start)} – ${minuteLabel(hover.start + MINUTE_MS)}`,
+        rows: hoverRows,
+      }),
+  );
+}
+
+function RealtimePanel({ live }) {
+  const data = live?.data ?? null;
+  const rate = data?.rate ?? null;
+  const loading = live?.status === 'loading';
+
+  return h(
+    'section',
+    { className: 'dus-panel dus-live-panel' },
+    h(
+      'div',
+      { className: 'dus-panel-head dus-live-head' },
+      h('h2', { className: 'dus-panel-title' }, '实时 Token 消耗'),
+    ),
+    h(
+      'div',
+      { className: 'dus-live-hero' },
+      h(
+        'div',
+        { className: 'dus-live-hero-value' },
+        rate === null ? '—' : formatStatTokens(rate.rollingMinute),
+      ),
+    ),
+    h(RealtimeBars, { data, loading }),
+  );
+}
+
+function Toolbar({ auto, setAuto, onRefresh, busy, live }) {
+  const enabled = auto.enabled;
+  return h(
+    'div',
+    { className: 'dus-toolbar' },
+    h(
+      'div',
+      { className: 'dus-seg dus-seg-sm dus-refresh-seg', role: 'group', 'aria-label': '自动刷新间隔' },
+      h(
+        'button',
+        {
+          type: 'button',
+          className: 'dus-seg-btn',
+          'data-active': enabled ? undefined : '',
+          'aria-pressed': !enabled,
+          onClick: () => {
+            setAuto({ enabled: false, intervalMs: auto.intervalMs });
+          },
+        },
+        '关闭',
+      ),
+      ...REFRESH_INTERVALS.map((option) =>
+        h(
+          'button',
+          {
+            key: option.id,
+            type: 'button',
+            className: 'dus-seg-btn',
+            'data-active': enabled && auto.intervalMs === option.ms ? '' : undefined,
+            'aria-pressed': enabled && auto.intervalMs === option.ms,
+            onClick: () => {
+              setAuto({ enabled: true, intervalMs: option.ms });
+            },
+          },
+          `${String(Math.round(option.ms / 1000))}秒`,
+        ),
+      ),
+    ),
+    live.error !== null && h('span', { className: 'dus-toolbar-error' }, live.error),
+    h(RefreshButton, { onRefresh, busy }),
   );
 }
 
@@ -215,7 +634,7 @@ function RefreshIcon({ size = 14 }) {
 }
 
 export function UsageDashboard() {
-  const { rangeId, setRangeId, range, state, refresh } = useUsageDocument();
+  const { rangeId, setRangeId, range, state, live, auto, setAuto, refresh } = useUsageDashboard();
   const document_ = state.document;
 
   const modelsWithUsage = useMemo(
@@ -260,8 +679,20 @@ export function UsageDashboard() {
             ),
         ),
 
+        h(Toolbar, {
+          key: 'toolbar',
+          auto,
+          setAuto,
+          onRefresh: refresh,
+          busy: state.status === 'refreshing',
+          live,
+        }),
+
         state.status === 'error' && document_ === null
-          ? h(StateView, { status: state.status, error: state.error, onRetry: refresh })
+          ? [
+              h(StateView, { key: 'state', status: state.status, error: state.error, onRetry: refresh }),
+              live.data !== null && h(RealtimePanel, { key: 'realtime', live }),
+            ]
           : [
               h(
                 'div',
@@ -283,6 +714,7 @@ export function UsageDashboard() {
                       ? `按 ${String(document_.totals.activeDays)} 个活跃日计算`
                       : '这个范围内还没有用量记录',
                 }),
+                h(RealtimeCard, { live }),
                 h(StatCard, {
                   value: `${String(document_?.totals.currentStreak ?? 0)} 天`,
                   label: '当前连续天数',
@@ -371,9 +803,10 @@ export function UsageDashboard() {
                 h(ModelDonut, { models: modelsWithUsage }),
                 h(ModelUsageChart, { days, models: modelsWithUsage, rangeDays: range }),
               ),
+
+              h(RealtimePanel, { key: 'realtime', live }),
             ],
       ),
     ),
-    h(RefreshButton, { onRefresh: refresh, busy: state.status === 'refreshing' }),
   );
 }

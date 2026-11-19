@@ -1,8 +1,8 @@
 {
   "name": "dsh-usage-overview",
   "displayName": "DSH Usage Overview",
-  "description": "A usage overview for DeepSeek Harness: token totals, activity heatmap, daily token and cache trends, and per-model attribution.",
-  "version": "1.1.4",
+  "description": "A usage overview for DeepSeek Harness: real-time tokens per minute, token totals, activity heatmap, daily token and cache trends, and per-model attribution.",
+  "version": "1.2.0",
   "icon": "icon.svg",
   "author": "w-callan-w",
   "repository": {
@@ -35,6 +35,14 @@
     "README.en.md"
   ],
   "license": "MIT",
+  "scripts": {
+    "test": "node tests/unit-realtime.mjs && node tests/host-integration.mjs && node tests/render.mjs && node tests/css.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "^31.0.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
   "dsh": {
     "manifestVersion": 1,
     "bundle": {

@@ -3,13 +3,22 @@
 [简体中文](README.md)
 
 A usage overview plugin for DeepSeek Harness. It reads the harness's own session
-records and presents token totals, an annual activity heatmap, daily token and
-cache-hit-rate trends, and a per-model breakdown with a stacked day/week chart.
+records and presents real-time tokens per minute, token totals, an annual activity
+heatmap, daily token and cache-hit-rate trends, and a per-model breakdown with a
+stacked day/week chart.
 
 [GitHub](https://github.com/w-callan-w/dsh-usage-overview) · [Gitee](https://gitee.com/callanjones/deep-seek-harness-usage-plugin) · [npm](https://www.npmjs.com/package/dsh-usage-overview)
 
 ## Features
 
+- **Real-time tokens** — consumption is bucketed per minute. A **实时 Token / 分钟** card
+  sits after the daily-average card in the strip and shows only the trailing-minute
+  rate; the realtime panel at the end of the page keeps just the top-left rate and a
+  bar per minute for the last hour, with a hover tooltip for each minute's total, top
+  models, and call count.
+- **Auto refresh** — the panel polls every 5 seconds by default (5/10/30/60
+  seconds, or off) and keeps a manual **刷新** button. Polling pauses while the page
+  is hidden and refreshes immediately on return.
 - **Headline metrics** — total tokens, peak day, daily average over active days,
   current and longest streaks, and prompt-cache hit rate.
 - **Token activity** — a year of daily usage as a Sunday-aligned heatmap with
@@ -76,6 +85,12 @@ with DSH's HMR bundle can reload on a manifest change.
 
 Open **用量统计** in the sidebar.
 
+- The toolbar above the cards starts with **关闭 / 5秒 / 10秒 / 30秒 / 60秒** on the
+  left to pick the cadence, remembered on this machine. The **刷新** button sits on
+  the right and always works, updating the real-time and historical data together.
+- The real-time card and panel follow only the refresh cadence, never the range
+  selector. Each of the last 60 minutes has one bar; hovering shows that minute's
+  total, top models, and call count.
 - The range selector controls the headline metrics, the daily token trend, the
   cache-rate chart, and the model usage trend.
 - The activity heatmap always draws a year grid; the range selector does not
@@ -103,6 +118,12 @@ model, and registers no model-facing tool.
    `ctx.sessionProjections.snapshot(session)` make an active session's running
    totals count immediately.
 
+Every assistant message carries a `time` and provider usage, so events are also
+bucketed per minute: a fold retains the last three hours of minute buckets and raw
+samples, and the real-time route derives trailing 1/5/15-minute and window totals
+plus each minute's model mix. A running session writes to its log as it goes, so
+its consumption appears in the current minute.
+
 Cache reads are counted as billed tokens. The cache hit rate is:
 
 ```text
@@ -118,6 +139,7 @@ The route is read-only.
 | Route | Purpose |
 |---|---|
 | `GET /plugins/dsh-usage-overview/stats?range=7d\|30d\|90d\|all` | Aggregate dashboard document |
+| `GET /plugins/dsh-usage-overview/realtime?minutes=60` | Per-minute real-time usage (minute buckets plus rolling-window rates); `minutes` is clamped to 5–240 |
 
 A request is accepted when it comes from loopback, or when DSH's session
 authentication vouches for it. The second path lets a phone reach the panel
@@ -151,6 +173,14 @@ into `lib/client.js` using DSH's module-loading format.
 | `node scripts/responsive-check.mjs [origin]` | Seven widths, live resize, light/dark contrast, screenshots |
 | `node scripts/verify-install.mjs` | Installed profile package, exports, routes, trust guard |
 | `node scripts/verify-live.mjs [origin]` | Running host serves the routes and bundle |
+| `node tests/unit-realtime.mjs` | Minute buckets, rolling windows, window bounds, empty data, clock skew |
+| `node tests/host-integration.mjs` | Mounts both routes on a throwaway HTTP server and compares them with an independent recount of the logs |
+| `node tests/render.mjs` | Renders the dashboard in jsdom + React and drives auto refresh, manual refresh, and the degraded paths |
+| `node tests/css.mjs` | Stylesheet brace balance, parseability, and key rules |
+
+The `tests/` checks need `npm install` first (test-only `react`, `react-dom`, `jsdom`).
+`host-integration.mjs` reads the real session logs under `$DSH_HOME/sessions`; the
+others need no running host.
 
 `responsive-check.mjs` and `verify-live.mjs` need a running host; pass its origin
 when it is not the default `http://127.0.0.1:50494`.
@@ -164,8 +194,10 @@ container query units, so there are no hard layout breakpoints.
 
 Colours use DSH `--dsw-*` tokens for both themes. The tooltip is a dark surface in
 both light and dark mode and therefore uses `--dsw-alias-tooltip-label`; small
-labels and chart axes use the higher-contrast secondary label token. The
-`responsive-check.mjs` theme pass enforces a minimum contrast ratio of 4.5:1.
+labels and chart axes use the higher-contrast secondary label token. The realtime
+bars use `--dus-live-bar` and highlight the ongoing minute with
+`--dus-live-bar-current`. The `responsive-check.mjs` theme pass enforces a minimum
+contrast ratio of 4.5:1.
 
 ## License
 
