@@ -24,6 +24,7 @@ console.log('parsed rules:', sheet.cssRules.length);
 const needle = [
   '.dus-toolbar',
   '.dus-toolbar-error',
+  '.dus-toolbar-end',
   '.dus-card-live',
   '.dus-live-value',
   '.dus-live-panel',
@@ -32,6 +33,14 @@ const needle = [
   '.dus-realtime-host',
   '.dus-live-bar',
   '.dus-refresh',
+  '.dus-cards-picker',
+  '.dus-cards-toggle',
+  '.dus-cards-count',
+  '.dus-cards-menu',
+  '.dus-cards-option',
+  '.dus-cards-box',
+  '.dus-cards-all',
+  '.dus-cards-empty',
 ];
 const text = [...sheet.cssRules].map((rule) => rule.cssText).join('\n');
 for (const selector of needle) {
@@ -54,6 +63,13 @@ if (!cardColor.includes('--dsw-alias-label-primary')) {
 
 const refresh = [...sheet.cssRules].find((rule) => rule.selectorText === '.dus-refresh');
 if (refresh?.style?.position === 'fixed') throw new Error('.dus-refresh must not float any more');
+
+// The chooser is an overlay: it must not push the cards around while open.
+const menu = [...sheet.cssRules].find((rule) => rule.selectorText === '.dus-cards-menu');
+if (menu?.style?.position !== 'absolute') throw new Error('.dus-cards-menu must be positioned over the page');
+if (menu?.style?.zIndex === '') throw new Error('.dus-cards-menu needs a stacking level');
+const option = [...sheet.cssRules].find((rule) => rule.selectorText === '.dus-cards-option');
+if (option?.style?.width !== '100%') throw new Error('.dus-cards-option must fill the menu width');
 
 
 const heroSize = heroValue?.style?.getPropertyValue('font-size') ?? '';

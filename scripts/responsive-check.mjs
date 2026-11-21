@@ -209,6 +209,9 @@ function measureExpression() {
       .map(([top, width]) => Math.round(width + (rows.get(top) - 1)));
     const cardsBox = root.querySelector('.dus-cards');
     const cardContentWidth = cardsBox.clientWidth;
+    // The viewer decides how many cards are shown, so the expected flow is
+    // derived from what is actually on the board rather than a fixed count.
+    const cardCount = cards.length;
     const chartOf = (kind) => {
       const chartHost = root.querySelector('.dus-chart-host[data-chart="' + kind + '"]');
       if (chartHost === null) return null;
@@ -246,6 +249,7 @@ function measureExpression() {
       cardRows,
       cardRowWidths,
       cardContentWidth,
+      cardCount,
       titleSize: parseFloat(getComputedStyle(root.querySelector('.dus-title')).fontSize),
       panelPadding: getComputedStyle(root.querySelector('.dus-panel')).padding,
       chart,
@@ -388,10 +392,10 @@ const CARD_BASIS = 150;
 
 const CARD_GAP = 1;
 
-function expectedCardRows(contentWidth) {
-  const perRow = Math.min(6, Math.max(1, Math.floor((contentWidth + CARD_GAP) / (CARD_BASIS + CARD_GAP))));
+function expectedCardRows(contentWidth, cardCount = 7) {
+  const perRow = Math.min(cardCount, Math.max(1, Math.floor((contentWidth + CARD_GAP) / (CARD_BASIS + CARD_GAP))));
   const rows = [];
-  for (let remaining = 6; remaining > 0; remaining -= perRow) rows.push(Math.min(perRow, remaining));
+  for (let remaining = cardCount; remaining > 0; remaining -= perRow) rows.push(Math.min(perRow, remaining));
   return rows;
 }
 
@@ -487,7 +491,7 @@ try {
         `heat=${result.heat.cell}px/${result.heat.overflowing ? 'scroll' : 'fit'}  donut=${String(result.donutWidth)}px  title=${String(result.titleSize)}px`,
     );
 
-    const expectedRows = expectedCardRows(result.cardContentWidth);
+    const expectedRows = expectedCardRows(result.cardContentWidth, result.cardCount);
     const rowsMatch = JSON.stringify(result.cardRows) === JSON.stringify(expectedRows);
     const rowsFilled = result.cardRowWidths.every(
       (rowWidth) => Math.abs(rowWidth - result.cardContentWidth) <= 2,
@@ -705,7 +709,7 @@ try {
       console.log(
         `resize -> ${String(step.width)}  cards=${next.cardRows.join('+')}  charts=${String(next.chart?.viewBoxWidth)}x${String(next.chart?.viewBoxHeight)}/${String(next.cacheChart?.viewBoxWidth)}x${String(next.cacheChart?.viewBoxHeight)}/${String(next.modelChart?.viewBoxWidth)}x${String(next.modelChart?.viewBoxHeight)}`,
       );
-      const expectedRows = expectedCardRows(next.cardContentWidth);
+      const expectedRows = expectedCardRows(next.cardContentWidth, next.cardCount);
       const rowsMatch = JSON.stringify(next.cardRows) === JSON.stringify(expectedRows);
       const rowsFilled = next.cardRowWidths.every(
         (rowWidth) => Math.abs(rowWidth - next.cardContentWidth) <= 2,

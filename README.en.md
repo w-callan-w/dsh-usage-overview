@@ -21,6 +21,10 @@ stacked day/week chart.
   is hidden and refreshes immediately on return.
 - **Headline metrics** — total tokens, peak day, daily average over active days,
   current and longest streaks, and prompt-cache hit rate.
+- **Pick your own cards** — the **卡片** button at the right of the toolbar lists the
+  headline cards, and each one can be switched on or off (all seven start on, at
+  least one always stays). The choice is remembered on this machine and survives a
+  reload.
 - **Token activity** — a year of daily usage as a Sunday-aligned heatmap with
   five intensity levels.
 - **Daily token trend** — one smoothed line per provider route, with a shared
@@ -88,6 +92,11 @@ Open **用量统计** in the sidebar.
 - The toolbar above the cards starts with **关闭 / 5秒 / 10秒 / 30秒 / 60秒** on the
   left to pick the cadence, remembered on this machine. The **刷新** button sits on
   the right and always works, updating the real-time and historical data together.
+- The **卡片** button at the far right of the toolbar (with the current count, e.g.
+  `6/7`) adds and removes headline cards: clearing an entry hides it immediately,
+  checking it again puts it back in its original position. **全选** restores every
+  card, and the last remaining card is locked at `1/7` so the board cannot be
+  emptied by accident. The selection is stored on this machine too.
 - The real-time card and panel follow only the refresh cadence, never the range
   selector. Each of the last 60 minutes has one bar; hovering shows that minute's
   total, top models, and call count.
@@ -175,7 +184,7 @@ into `lib/client.js` using DSH's module-loading format.
 | `node scripts/verify-live.mjs [origin]` | Running host serves the routes and bundle |
 | `node tests/unit-realtime.mjs` | Minute buckets, rolling windows, window bounds, empty data, clock skew |
 | `node tests/host-integration.mjs` | Mounts both routes on a throwaway HTTP server and compares them with an independent recount of the logs |
-| `node tests/render.mjs` | Renders the dashboard in jsdom + React and drives auto refresh, manual refresh, and the degraded paths |
+| `node tests/render.mjs` | Renders the dashboard in jsdom + React and drives auto refresh, manual refresh, card visibility, and the degraded paths |
 | `node tests/css.mjs` | Stylesheet brace balance, parseability, and key rules |
 
 The `tests/` checks need `npm install` first (test-only `react`, `react-dom`, `jsdom`).
