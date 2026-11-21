@@ -405,12 +405,19 @@ export const CSS = `.dus-root {
   .dus-cards-menu {
     position: absolute; top: calc(100% + 8px); right: 0; z-index: 40;
     display: flex; flex-direction: column; gap: 2px;
-    width: 226px; max-width: calc(100vw - 24px);
+    width: 232px; max-width: calc(100vw - 24px);
+    max-height: min(78vh, 560px);
+    overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
     padding: 6px; box-sizing: border-box;
     border-radius: var(--dsw-radius-lg);
     border: 1px solid var(--dsw-alias-border-l2);
     background: var(--dsw-alias-bg-layer-1, var(--dsw-alias-bg-layer-2));
     box-shadow: var(--dsw-elevation-prominent);
+  }
+  .dus-cards-group { display: flex; flex-direction: column; gap: 2px; }
+  .dus-cards-group + .dus-cards-group {
+    margin-top: 3px; padding-top: 3px;
+    border-top: 1px solid var(--dsw-alias-border-l1);
   }
   .dus-cards-menu-head {
     display: flex; align-items: center; gap: 8px;

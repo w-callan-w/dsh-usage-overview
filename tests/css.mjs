@@ -37,6 +37,7 @@ const needle = [
   '.dus-cards-toggle',
   '.dus-cards-count',
   '.dus-cards-menu',
+  '.dus-cards-group',
   '.dus-cards-option',
   '.dus-cards-box',
   '.dus-cards-all',
@@ -68,6 +69,10 @@ if (refresh?.style?.position === 'fixed') throw new Error('.dus-refresh must not
 const menu = [...sheet.cssRules].find((rule) => rule.selectorText === '.dus-cards-menu');
 if (menu?.style?.position !== 'absolute') throw new Error('.dus-cards-menu must be positioned over the page');
 if (menu?.style?.zIndex === '') throw new Error('.dus-cards-menu needs a stacking level');
+// Two groups of items live in the menu now, so it has to cap its height and scroll
+// instead of running off the bottom of the panel.
+if (menu?.style?.maxHeight === '') throw new Error('.dus-cards-menu must cap its height');
+if (!String(menu?.style?.overflowY ?? '').includes('auto')) throw new Error('.dus-cards-menu must scroll its list');
 const option = [...sheet.cssRules].find((rule) => rule.selectorText === '.dus-cards-option');
 if (option?.style?.width !== '100%') throw new Error('.dus-cards-option must fill the menu width');
 
