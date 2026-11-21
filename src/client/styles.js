@@ -360,7 +360,6 @@ export const CSS = `.dus-root {
 
   .dus-refresh {
     flex: none;
-    margin-left: auto;
   }
 
   .dus-toolbar {
@@ -377,6 +376,110 @@ export const CSS = `.dus-root {
     font-size: 12px;
   }
   .dus-refresh-seg { flex: none; }
+  .dus-toolbar-end {
+    display: flex; align-items: center; gap: 8px;
+    margin-left: auto; flex: none;
+  }
+
+  .dus-cards-picker { position: relative; display: flex; }
+  .dus-cards-toggle {
+    gap: 6px; padding: 6px 10px; font-size: 12.5px;
+    white-space: nowrap;
+  }
+  .dus-cards-toggle[data-open] {
+    background: var(--dsw-alias-bg-layer-4, var(--dsw-alias-interactive-bg-hover));
+    border-color: var(--dsw-alias-border-l2);
+    box-shadow: var(--dsw-elevation-soft);
+  }
+  .dus-cards-count {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 26px; padding: 0 5px;
+    border-radius: 999px;
+    background: var(--dsw-alias-bg-layer-3);
+    border: 1px solid var(--dsw-alias-border-l2);
+    color: var(--dsw-alias-label-secondary);
+    font-size: 10.5px; font-weight: 500; line-height: 15px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .dus-cards-menu {
+    position: absolute; top: calc(100% + 8px); right: 0; z-index: 40;
+    display: flex; flex-direction: column; gap: 2px;
+    width: 226px; max-width: calc(100vw - 24px);
+    padding: 6px; box-sizing: border-box;
+    border-radius: var(--dsw-radius-lg);
+    border: 1px solid var(--dsw-alias-border-l2);
+    background: var(--dsw-alias-bg-layer-1, var(--dsw-alias-bg-layer-2));
+    box-shadow: var(--dsw-elevation-prominent);
+  }
+  .dus-cards-menu-head {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 6px 6px;
+  }
+  .dus-cards-menu-title {
+    font-size: 12px; font-weight: 600;
+    color: var(--dsw-alias-label-secondary);
+  }
+  .dus-cards-all {
+    margin-left: auto;
+    appearance: none; border: none; cursor: pointer; background: transparent;
+    font-family: inherit; font-size: 11.5px; font-weight: 500;
+    color: var(--dus-accent);
+    padding: 2px 4px; border-radius: var(--dsw-radius-xs);
+    transition: background 120ms ease;
+  }
+  .dus-cards-all:hover { background: var(--dsw-alias-interactive-bg-hover); }
+  .dus-cards-all[disabled] {
+    background: transparent; color: var(--dsw-alias-label-secondary);
+    opacity: 0.5; cursor: default;
+  }
+  .dus-cards-list { display: flex; flex-direction: column; gap: 1px; }
+  .dus-cards-option {
+    display: flex; align-items: center; gap: 8px;
+    width: 100%; box-sizing: border-box;
+    appearance: none; border: none; cursor: pointer; background: transparent;
+    font-family: inherit; font-size: 12.5px; font-weight: 400;
+    color: var(--dsw-alias-label-primary); text-align: left;
+    padding: 6px; border-radius: var(--dsw-radius-sm);
+    transition: background 120ms ease;
+  }
+  .dus-cards-option:hover { background: var(--dsw-alias-interactive-bg-hover); }
+  .dus-cards-box {
+    flex: none;
+    width: 15px; height: 15px; box-sizing: border-box;
+    display: grid; place-items: center;
+    border: 1px solid var(--dsw-alias-border-l2);
+    border-radius: 4px;
+    background: var(--dsw-alias-bg-layer-2);
+    color: var(--dsw-alias-bg-base);
+  }
+  .dus-cards-option[data-checked] .dus-cards-box {
+    background: var(--dus-accent);
+    border-color: transparent;
+  }
+  .dus-cards-option-label {
+    min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .dus-cards-option[data-locked] { opacity: 0.55; cursor: default; }
+  .dus-cards-option[data-locked]:hover { background: transparent; }
+  .dus-cards-menu-foot {
+    margin-top: 2px; padding: 7px 6px 2px;
+    border-top: 1px solid var(--dsw-alias-border-l1);
+    font-size: 11px; color: var(--dsw-alias-label-secondary);
+  }
+
+  .dus-cards-empty {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+    gap: 4px 10px;
+    padding: 22px 16px;
+    border: 1px solid var(--dsw-alias-border-l1);
+    border-radius: var(--dsw-radius-lg);
+    background: var(--dsw-alias-bg-layer-2);
+    color: var(--dsw-alias-label-secondary);
+    font-size: 13px;
+  }
+  .dus-cards-empty .dus-cards-all { margin-left: 0; font-size: 13px; }
 
   .dus-card-live .dus-live-value { color: var(--dsw-alias-label-primary); }
   .dus-live-value { display: inline-flex; align-items: baseline; justify-content: center; gap: 1px; }

@@ -112,6 +112,10 @@ export async function boot(options = {}) {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(options.storage));
   }
 
+  if (options.cards !== undefined) {
+    window.localStorage.setItem('dsh-usage-overview/cards', JSON.stringify(options.cards));
+  }
+
   const realtime = options.realtime === undefined ? realtimeFixture() : options.realtime;
   const stats = options.stats === undefined ? statsFixture() : options.stats;
   const calls = [];

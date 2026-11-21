@@ -30,6 +30,10 @@ const POLL_INTERVAL_MS = 30000;
 
 const AUTO_REFRESH_STORAGE_KEY = 'dsh-usage-overview/auto-refresh';
 
+// Which headline cards the viewer keeps on the board is a personal preference,
+// so it is remembered the same way as the refresh cadence.
+const CARDS_STORAGE_KEY = 'dsh-usage-overview/cards';
+
 // Headline stat cards show two decimal places (e.g. 53.80亿).
 function formatStatTokens(value) {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return '—';
@@ -236,7 +240,39 @@ function StatCard({ value, label, title }) {
   );
 }
 
-function CacheHitCard({ totals }) {
+function TotalCard({ label, usage }) {
+  return h(StatCard, { value: formatStatTokens(usage?.totals.total ?? 0), label });
+}
+
+function PeakDayCard({ label, usage }) {
+  return h(StatCard, {
+    value: formatStatTokens(usage?.totals.peakDayTokens ?? 0),
+    label,
+    title: usage?.totals.peakDay == null ? undefined : `用量最高的一天：${usage.totals.peakDay}`,
+  });
+}
+
+function DailyAverageCard({ label, usage }) {
+  return h(StatCard, {
+    value: formatStatTokens(usage?.totals.averageTokensPerActiveDay ?? 0),
+    label,
+    title:
+      (usage?.totals.activeDays ?? 0) > 0
+        ? `按 ${String(usage.totals.activeDays)} 个活跃日计算`
+        : '这个范围内还没有用量记录',
+  });
+}
+
+function CurrentStreakCard({ label, usage }) {
+  return h(StatCard, { value: `${String(usage?.totals.currentStreak ?? 0)} 天`, label });
+}
+
+function LongestStreakCard({ label, usage }) {
+  return h(StatCard, { value: `${String(usage?.totals.longestStreak ?? 0)} 天`, label });
+}
+
+function CacheHitCard({ usage, label }) {
+  const totals = usage?.totals;
   const rate = typeof totals?.cacheHitRate === 'number' ? totals.cacheHitRate : null;
   const cached = totals?.cacheReadTokens ?? 0;
   const written = totals?.cacheWriteTokens ?? 0;
@@ -261,7 +297,7 @@ function CacheHitCard({ totals }) {
       { className: 'dus-card-value' },
       rate === null ? '—' : formatPercent(rate),
     ),
-    h('div', { className: 'dus-card-label' }, '缓存命中率'),
+    h('div', { className: 'dus-card-label' }, label),
     rate !== null &&
       h(
         'div',
@@ -271,7 +307,7 @@ function CacheHitCard({ totals }) {
   );
 }
 
-function RealtimeCard({ live }) {
+function RealtimeCard({ live, label }) {
   const data = live?.data ?? null;
   const rate = data?.rate ?? null;
   const detail =
@@ -293,7 +329,205 @@ function RealtimeCard({ live }) {
       { className: 'dus-card-value dus-live-value' },
       rate === null ? '—' : formatStatTokens(rate.rollingMinute),
     ),
-    h('div', { className: 'dus-card-label' }, '实时 Token / 分钟'),
+    h('div', { className: 'dus-card-label' }, label),
+  );
+}
+
+// The headline cards, in display order. `label` is shared by the card itself and
+// the chooser, so a card can never be renamed in one place only.
+const STAT_CARDS = [
+  { id: 'total', label: '累计 Token 数', Component: TotalCard },
+  { id: 'peak-day', label: '单日峰值 Token 数', Component: PeakDayCard },
+  { id: 'daily-average', label: '日均 Token 数', Component: DailyAverageCard },
+  { id: 'realtime', label: '实时 Token / 分钟', Component: RealtimeCard },
+  { id: 'current-streak', label: '当前连续天数', Component: CurrentStreakCard },
+  { id: 'longest-streak', label: '最长连续天数', Component: LongestStreakCard },
+  { id: 'cache-hit', label: '缓存命中率', Component: CacheHitCard },
+];
+
+const STAT_CARD_BY_ID = new Map(STAT_CARDS.map((card) => [card.id, card]));
+const STAT_CARD_IDS = STAT_CARDS.map((card) => card.id);
+const DEFAULT_VISIBLE_CARDS = STAT_CARD_IDS.slice();
+
+// Unknown, duplicated, or named cards from an older build are dropped; an empty
+// selection falls back to every card so the board can never come up blank.
+function normalizeVisibleCards(value) {
+  if (!Array.isArray(value)) return DEFAULT_VISIBLE_CARDS;
+  const wanted = new Set(value.filter((item) => typeof item === 'string'));
+  const picked = STAT_CARD_IDS.filter((id) => wanted.has(id));
+  return picked.length === 0 ? DEFAULT_VISIBLE_CARDS : picked;
+}
+
+function readVisibleCards() {
+  try {
+    const raw = window.localStorage.getItem(CARDS_STORAGE_KEY);
+    if (raw === null) return DEFAULT_VISIBLE_CARDS;
+    return normalizeVisibleCards(JSON.parse(raw));
+  } catch {
+    return DEFAULT_VISIBLE_CARDS;
+  }
+}
+
+function useVisibleCards() {
+  const [visible, setVisible] = useState(readVisibleCards);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(CARDS_STORAGE_KEY, JSON.stringify(visible));
+    } catch {
+    }
+  }, [visible]);
+
+  const toggle = useCallback((id) => {
+    setVisible((previous) => {
+      if (!previous.includes(id)) return STAT_CARD_IDS.filter((item) => item === id || previous.includes(item));
+      // The last remaining card stays: a board with no numbers would be a bug, not a choice.
+      if (previous.length <= 1) return previous;
+      return previous.filter((item) => item !== id);
+    });
+  }, []);
+
+  const showAll = useCallback(() => {
+    setVisible(DEFAULT_VISIBLE_CARDS);
+  }, []);
+
+  return { visible, toggle, showAll };
+}
+
+function CardsIcon({ size = 14 } = {}) {
+  return h(
+    'svg',
+    {
+      width: String(size),
+      height: String(size),
+      viewBox: '0 0 16 16',
+      fill: 'none',
+      stroke: 'currentColor',
+      'stroke-width': '1.4',
+      'stroke-linecap': 'round',
+      'stroke-linejoin': 'round',
+      'aria-hidden': 'true',
+    },
+    h('rect', { x: '2.2', y: '2.6', width: '4.6', height: '4.6', rx: '1.1' }),
+    h('rect', { x: '9.2', y: '2.6', width: '4.6', height: '4.6', rx: '1.1' }),
+    h('rect', { x: '2.2', y: '9', width: '4.6', height: '4.6', rx: '1.1' }),
+    h('rect', { x: '9.2', y: '9', width: '4.6', height: '4.6', rx: '1.1' }),
+  );
+}
+
+function CheckIcon({ size = 10 } = {}) {
+  return h(
+    'svg',
+    {
+      width: String(size),
+      height: String(size),
+      viewBox: '0 0 12 12',
+      fill: 'none',
+      stroke: 'currentColor',
+      'stroke-width': '2',
+      'stroke-linecap': 'round',
+      'stroke-linejoin': 'round',
+      'aria-hidden': 'true',
+    },
+    h('path', { d: 'M2.6 6.3 4.8 8.5 9.4 3.5' }),
+  );
+}
+
+function CardPicker({ visible, toggle, showAll }) {
+  const [open, setOpen] = useState(false);
+  const host = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onPointerDown = (event) => {
+      if (host.current !== null && !host.current.contains(event.target)) setOpen(false);
+    };
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  const count = visible.length;
+  const lockedHint = '至少保留一张卡片';
+
+  return h(
+    'div',
+    { className: 'dus-cards-picker', ref: host },
+    h(
+      'button',
+      {
+        type: 'button',
+        className: 'dus-btn dus-cards-toggle',
+        'aria-label': '选择要展示的卡片',
+        'aria-haspopup': 'true',
+        'aria-expanded': open,
+        title: '选择要展示的卡片',
+        'data-open': open ? '' : undefined,
+        onClick: () => {
+          setOpen((value) => !value);
+        },
+      },
+      h(CardsIcon, { size: 14 }),
+      h('span', null, '卡片'),
+      h('span', { className: 'dus-cards-count' }, `${String(count)}/${String(STAT_CARDS.length)}`),
+    ),
+    open &&
+      h(
+        'div',
+        { className: 'dus-cards-menu', role: 'group', 'aria-label': '选择要展示的卡片' },
+        h(
+          'div',
+          { className: 'dus-cards-menu-head' },
+          h('span', { className: 'dus-cards-menu-title' }, '展示的卡片'),
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'dus-cards-all',
+              disabled: count === STAT_CARDS.length,
+              onClick: showAll,
+            },
+            '全选',
+          ),
+        ),
+        h(
+          'div',
+          { className: 'dus-cards-list' },
+          ...STAT_CARDS.map((card) => {
+            const checked = visible.includes(card.id);
+            const locked = checked && count <= 1;
+            return h(
+              'button',
+              {
+                key: card.id,
+                type: 'button',
+                role: 'checkbox',
+                className: 'dus-cards-option',
+                'aria-checked': checked,
+                'data-checked': checked ? '' : undefined,
+                'data-locked': locked ? '' : undefined,
+                title: locked ? lockedHint : `展示「${card.label}」`,
+                onClick: () => {
+                  toggle(card.id);
+                },
+              },
+              h('span', { className: 'dus-cards-box', 'aria-hidden': 'true' }, checked ? h(CheckIcon, { size: 9 }) : null),
+              h('span', { className: 'dus-cards-option-label' }, card.label),
+            );
+          }),
+        ),
+        h(
+          'div',
+          { className: 'dus-cards-menu-foot' },
+          count === 1 ? lockedHint : `已展示 ${String(count)} / ${String(STAT_CARDS.length)} 张卡片`,
+        ),
+      ),
   );
 }
 
@@ -513,7 +747,7 @@ function RealtimePanel({ live }) {
   );
 }
 
-function Toolbar({ auto, setAuto, onRefresh, busy, live }) {
+function Toolbar({ auto, setAuto, onRefresh, busy, live, cards }) {
   const enabled = auto.enabled;
   return h(
     'div',
@@ -552,7 +786,12 @@ function Toolbar({ auto, setAuto, onRefresh, busy, live }) {
       ),
     ),
     live.error !== null && h('span', { className: 'dus-toolbar-error' }, live.error),
-    h(RefreshButton, { onRefresh, busy }),
+    h(
+      'div',
+      { className: 'dus-toolbar-end' },
+      h(CardPicker, { visible: cards.visible, toggle: cards.toggle, showAll: cards.showAll }),
+      h(RefreshButton, { onRefresh, busy }),
+    ),
   );
 }
 
@@ -635,7 +874,14 @@ function RefreshIcon({ size = 14 }) {
 
 export function UsageDashboard() {
   const { rangeId, setRangeId, range, state, live, auto, setAuto, refresh } = useUsageDashboard();
+  const { visible: visibleCards, toggle: toggleCard, showAll: showAllCards } = useVisibleCards();
   const document_ = state.document;
+
+  const cards = visibleCards.map((id) => {
+    const card = STAT_CARD_BY_ID.get(id);
+    if (card === undefined) return null;
+    return h(card.Component, { key: id, label: card.label, usage: document_, live });
+  });
 
   const modelsWithUsage = useMemo(
     () => (document_?.models ?? []).filter((model) => model.total > 0),
@@ -686,6 +932,7 @@ export function UsageDashboard() {
           onRefresh: refresh,
           busy: state.status === 'refreshing',
           live,
+          cards: { visible: visibleCards, toggle: toggleCard, showAll: showAllCards },
         }),
 
         state.status === 'error' && document_ === null
@@ -694,37 +941,18 @@ export function UsageDashboard() {
               live.data !== null && h(RealtimePanel, { key: 'realtime', live }),
             ]
           : [
-              h(
-                'div',
-                { className: 'dus-cards', key: 'cards' },
-                h(StatCard, { value: formatStatTokens(document_?.totals.total ?? 0), label: '累计 Token 数' }),
-                h(StatCard, {
-                  value: formatStatTokens(document_?.totals.peakDayTokens ?? 0),
-                  label: '单日峰值 Token 数',
-                  title:
-                    document_?.totals.peakDay == null
-                      ? undefined
-                      : `用量最高的一天：${document_.totals.peakDay}`,
-                }),
-                h(StatCard, {
-                  value: formatStatTokens(document_?.totals.averageTokensPerActiveDay ?? 0),
-                  label: '日均 Token 数',
-                  title:
-                    (document_?.totals.activeDays ?? 0) > 0
-                      ? `按 ${String(document_.totals.activeDays)} 个活跃日计算`
-                      : '这个范围内还没有用量记录',
-                }),
-                h(RealtimeCard, { live }),
-                h(StatCard, {
-                  value: `${String(document_?.totals.currentStreak ?? 0)} 天`,
-                  label: '当前连续天数',
-                }),
-                h(StatCard, {
-                  value: `${String(document_?.totals.longestStreak ?? 0)} 天`,
-                  label: '最长连续天数',
-                }),
-                h(CacheHitCard, { totals: document_?.totals }),
-              ),
+              cards.length === 0
+                ? h(
+                    'div',
+                    { className: 'dus-cards-empty', key: 'cards' },
+                    h('span', null, '所有卡片都被隐藏了。'),
+                    h(
+                      'button',
+                      { type: 'button', className: 'dus-cards-all', onClick: showAllCards },
+                      '恢复默认',
+                    ),
+                  )
+                : h('div', { className: 'dus-cards', key: 'cards' }, ...cards),
 
               h(
                 'div',

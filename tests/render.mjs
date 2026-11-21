@@ -4,9 +4,27 @@ import assert from 'node:assert/strict';
 import { boot, text, waitFor } from './render-harness.mjs';
 
 const LIVE_CARD_LABEL = '实时 Token / 分钟';
+const CARDS_STORAGE_KEY = 'dsh-usage-overview/cards';
+const ALL_CARD_LABELS = [
+  '累计 Token 数',
+  '单日峰值 Token 数',
+  '日均 Token 数',
+  '实时 Token / 分钟',
+  '当前连续天数',
+  '最长连续天数',
+  '缓存命中率',
+];
 
 function findButton(document, label) {
   return [...document.querySelectorAll('button')].find((node) => text(node) === label);
+}
+
+function cardLabels(document) {
+  return [...document.querySelectorAll('.dus-cards .dus-card-label')].map(text);
+}
+
+function cardOptions(document) {
+  return [...document.querySelectorAll('.dus-cards-option')];
 }
 
 // ---- 1. First paint: realtime card, panel, controls --------------------------------
@@ -237,6 +255,129 @@ function findButton(document, label) {
   const rows = [...tip.querySelectorAll('.dus-tip-row')].map(text);
   assert.ok(rows.some((row) => row.startsWith('合计')), `tooltip lists the minute total: ${rows.join(' | ')}`);
   assert.ok(rows.some((row) => row.includes('deepseek-v4.1-flash')), 'tooltip lists the model split');
+
+  root.unmount();
+  window.close();
+}
+
+// ---- 9. The card chooser hides cards and remembers the choice ------------------
+{
+  const { document, window, root } = await boot();
+  await waitFor(() => document.querySelectorAll('.dus-card').length === 7, { label: 'seven cards' });
+
+  const toolbar = document.querySelector('.dus-toolbar');
+  const toggle = toolbar.querySelector('.dus-cards-toggle');
+  assert.ok(toggle !== null, 'card chooser sits in the toolbar');
+  assert.equal(toggle.getAttribute('aria-label'), '选择要展示的卡片');
+  assert.equal(toggle.getAttribute('aria-haspopup'), 'true');
+  assert.equal(toggle.getAttribute('aria-expanded'), 'false', 'menu starts closed');
+  assert.equal(text(toggle), '卡片7/7', `counter starts at 7/7: ${text(toggle)}`);
+  assert.equal(document.querySelector('.dus-cards-menu'), null, 'no menu before the button is used');
+
+  toggle.click();
+  await waitFor(() => document.querySelector('.dus-cards-menu') !== null, { label: 'card menu' });
+  assert.equal(toggle.getAttribute('aria-expanded'), 'true');
+  assert.deepEqual(cardOptions(document).map(text), ALL_CARD_LABELS);
+  assert.deepEqual(
+    cardOptions(document).map((node) => node.getAttribute('aria-checked')),
+    ALL_CARD_LABELS.map(() => 'true'),
+    'every card is on by default',
+  );
+  assert.ok(cardOptions(document).every((node) => node.getAttribute('data-locked') === null), 'nothing is locked');
+
+  // Turning a card off takes it off the board and keeps the rest in place.
+  findButton(document, '单日峰值 Token 数').click();
+  await waitFor(() => document.querySelectorAll('.dus-card').length === 6, { label: 'six cards' });
+  assert.deepEqual(cardLabels(document), [
+    '累计 Token 数',
+    '日均 Token 数',
+    '实时 Token / 分钟',
+    '当前连续天数',
+    '最长连续天数',
+    '缓存命中率',
+  ]);
+  assert.equal(text(document.querySelector('.dus-cards-toggle')), '卡片6/7');
+  await waitFor(
+    () =>
+      window.localStorage.getItem(CARDS_STORAGE_KEY) ===
+      '["total","daily-average","realtime","current-streak","longest-streak","cache-hit"]',
+    { label: 'persisted card selection' },
+  );
+  const option = findButton(document, '单日峰值 Token 数');
+  assert.equal(option.getAttribute('aria-checked'), 'false', 'the option stays in the list, unchecked');
+
+  // Turning one back on restores it at its catalog position, not at the end.
+  option.click();
+  await waitFor(() => document.querySelectorAll('.dus-card').length === 7, { label: 'seven cards again' });
+  assert.deepEqual(cardLabels(document), ALL_CARD_LABELS);
+
+  // The realtime card only hides the number card; the chart panel is not a card.
+  findButton(document, '实时 Token / 分钟').click();
+  await waitFor(() => document.querySelector('.dus-card-live') === null, { label: 'realtime card hidden' });
+  assert.equal(document.querySelectorAll('.dus-card').length, 6);
+  assert.ok(document.querySelector('.dus-live-panel') !== null, 'the realtime panel is unaffected');
+
+  // 全选 puts every card back in one click.
+  findButton(document, '全选').click();
+  await waitFor(() => document.querySelectorAll('.dus-card').length === 7, { label: 'all cards restored' });
+  assert.equal(text(document.querySelector('.dus-cards-toggle')), '卡片7/7');
+
+  // Escape closes the menu.
+  document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  await waitFor(() => document.querySelector('.dus-cards-menu') === null, { label: 'menu closed by Escape' });
+
+  // A click elsewhere on the page closes it too.
+  document.querySelector('.dus-cards-toggle').click();
+  await waitFor(() => document.querySelector('.dus-cards-menu') !== null, { label: 'card menu reopened' });
+  document.body.dispatchEvent(new window.MouseEvent('mousedown', { bubbles: true }));
+  await waitFor(() => document.querySelector('.dus-cards-menu') === null, { label: 'menu closed by outside click' });
+
+  root.unmount();
+  window.close();
+}
+
+// ---- 10. A stored card selection is restored -----------------------------------
+{
+  const { document, window, root } = await boot({ cards: ['cache-hit', 'total'] });
+  await waitFor(() => document.querySelectorAll('.dus-card').length === 2, { label: 'two stored cards' });
+  assert.deepEqual(cardLabels(document), ['累计 Token 数', '缓存命中率'], 'stored ids follow the catalog order');
+  assert.equal(text(document.querySelector('.dus-cards-toggle')), '卡片2/7');
+  await waitFor(() => window.localStorage.getItem(CARDS_STORAGE_KEY) === '["total","cache-hit"]', {
+    label: 'normalised stored selection',
+  });
+
+  root.unmount();
+  window.close();
+}
+
+// ---- 11. Unknown ids are ignored and the last card is protected -----------------
+{
+  const { document, window, root } = await boot({ cards: ['total', 'retired-card', 'total'] });
+  await waitFor(() => document.querySelectorAll('.dus-card').length === 1, { label: 'the one known card' });
+  assert.deepEqual(cardLabels(document), ['累计 Token 数'], 'unknown and duplicated ids are dropped');
+  await waitFor(() => window.localStorage.getItem(CARDS_STORAGE_KEY) === '["total"]', {
+    label: 'unknown ids dropped from storage',
+  });
+
+  document.querySelector('.dus-cards-toggle').click();
+  await waitFor(() => document.querySelector('.dus-cards-menu') !== null, { label: 'card menu' });
+  const only = cardOptions(document).find((node) => node.getAttribute('data-checked') !== null);
+  assert.ok(only !== undefined, 'the remaining card is shown as on');
+  assert.ok(only.getAttribute('data-locked') !== null, 'the last card is locked');
+  assert.ok(text(document.querySelector('.dus-cards-menu-foot')).includes('至少保留一张卡片'));
+
+  only.click();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(document.querySelectorAll('.dus-card').length, 1, 'the last card cannot be removed');
+  assert.equal(text(document.querySelector('.dus-cards-toggle')), '卡片1/7');
+
+  root.unmount();
+  window.close();
+}
+{
+  const { document, window, root } = await boot({ cards: [] });
+  await waitFor(() => document.querySelectorAll('.dus-card').length === 7, { label: 'empty selection falls back' });
+  assert.deepEqual(cardLabels(document), ALL_CARD_LABELS, 'an empty stored selection shows every card');
 
   root.unmount();
   window.close();
