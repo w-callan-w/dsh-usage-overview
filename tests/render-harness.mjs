@@ -34,7 +34,15 @@ function realtimeFixture() {
   return buildRealtimeDocument(sessions, { now: generatedAt, windowMinutes: 60 });
 }
 
+const TODAY_TOKENS = 12345678;
+
+function todayKeyOf(ms) {
+  const date = new Date(ms);
+  return `${String(date.getFullYear())}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
 function statsFixture() {
+  const today = todayKeyOf(now);
   return {
     schemaVersion: 1,
     generatedAt: now,
@@ -57,7 +65,10 @@ function statsFixture() {
       longestStreak: 5,
       cacheHitRate: 90,
     },
-    days: [{ day: '2026-11-18', total: 4000, totals: { uncachedInputTokens: 400, cacheReadTokens: 3200, cacheWriteTokens: 0, outputTokens: 400 }, sessions: 2, byModel: { 'opencode-go/deepseek-v4.1-flash': 4000 } }],
+    days: [
+      { day: '2026-11-18', total: 4000, totals: { uncachedInputTokens: 400, cacheReadTokens: 3200, cacheWriteTokens: 0, outputTokens: 400 }, sessions: 2, byModel: { 'opencode-go/deepseek-v4.1-flash': 4000 } },
+      { day: today, total: TODAY_TOKENS, totals: { uncachedInputTokens: 1000, cacheReadTokens: 11000000, cacheWriteTokens: 0, outputTokens: 345678 }, sessions: 1, byModel: { 'opencode-go/deepseek-v4.1-flash': TODAY_TOKENS } },
+    ],
     models: [{ model: 'deepseek-v4.1-flash', provider: 'opencode-go', source: 'OpenCode Go', totals: { uncachedInputTokens: 400, cacheReadTokens: 3200, cacheWriteTokens: 0, outputTokens: 400 }, sessions: 2, calls: 4, turns: 2, total: 4000 }],
   };
 }
@@ -112,8 +123,26 @@ export async function boot(options = {}) {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(options.storage));
   }
 
+  if (options.legacyCards !== undefined) {
+    window.localStorage.setItem('dsh-usage-overview/cards', JSON.stringify(options.legacyCards));
+  }
+
+  if (options.legacyPanels !== undefined) {
+    window.localStorage.setItem('dsh-usage-overview/panels', JSON.stringify(options.legacyPanels));
+  }
+
   if (options.cards !== undefined) {
-    window.localStorage.setItem('dsh-usage-overview/cards', JSON.stringify(options.cards));
+    window.localStorage.setItem(
+      'dsh-usage-overview/cards',
+      JSON.stringify({ version: 2, visible: options.cards }),
+    );
+  }
+
+  if (options.panels !== undefined) {
+    window.localStorage.setItem(
+      'dsh-usage-overview/panels',
+      JSON.stringify({ version: 2, visible: options.panels }),
+    );
   }
 
   const realtime = options.realtime === undefined ? realtimeFixture() : options.realtime;
