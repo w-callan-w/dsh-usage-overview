@@ -22,6 +22,7 @@ import {
   TokenHeatmap,
   TokenTrend,
   Tooltip,
+  axisGutter,
   pointerToViewBox,
   useMeasuredWidth,
   viewBoxToClient,
@@ -633,17 +634,24 @@ function RealtimeBars({ data, loading }) {
   const padTop = 10;
   const padRight = 12;
   const padBottom = 24;
-  const padLeft = Math.round(Math.max(34, Math.min(48, width * 0.05)));
   const axisSize = Math.max(10, Math.min(11, 9.5 + width * 0.0015));
+
+  const peak = useMemo(() => {
+    const buckets = Array.isArray(data?.buckets) ? data.buckets : [];
+    return buckets.reduce((max, bucket) => Math.max(max, bucket.total ?? 0), 0);
+  }, [data]);
+  const step = peak <= 1000 ? 100 : 10 ** Math.max(0, Math.floor(Math.log10(peak)) - 1);
+  const ceiling = Math.max(step, Math.ceil(peak / step) * step);
+  const axisLabels = [0, 0.5, 1].map((ratio) =>
+    ratio === 0 ? '0' : formatTokensZh(Math.round(ceiling * ratio)),
+  );
+  const padLeft = axisGutter(axisLabels, axisSize, 34, width);
 
   const plot = useMemo(() => {
     const buckets = Array.isArray(data?.buckets) ? data.buckets : [];
     const count = Math.max(1, buckets.length);
     const usableWidth = Math.max(1, width - padLeft - padRight);
     const usableHeight = Math.max(1, height - padTop - padBottom);
-    const peak = buckets.reduce((max, bucket) => Math.max(max, bucket.total ?? 0), 0);
-    const step = peak <= 1000 ? 100 : 10 ** Math.max(0, Math.floor(Math.log10(peak)) - 1);
-    const ceiling = Math.max(step, Math.ceil(peak / step) * step);
     const slot = usableWidth / count;
     const barWidth = Math.max(2, Math.min(16, slot * 0.66));
 
@@ -681,7 +689,7 @@ function RealtimeBars({ data, loading }) {
     }
 
     return { buckets, bars, gridLines, ticks, slot, usableWidth, usableHeight, ceiling };
-  }, [data, width, height, padLeft, padRight, padTop, padBottom]);
+  }, [data, width, height, padLeft, padRight, padTop, padBottom, ceiling]);
 
   const empty = plot.buckets.length === 0 || plot.bars.every((bar) => bar.total <= 0);
   const hover = hoverIndex === null ? null : (plot.bars[hoverIndex] ?? null);

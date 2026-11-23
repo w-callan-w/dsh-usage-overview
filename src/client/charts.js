@@ -36,6 +36,60 @@ export function useMeasuredWidth(fallback = FALLBACK_CHART_WIDTH) {
   return { host, width };
 }
 
+// Y-axis labels are right-aligned in the left gutter, so the gutter has to be at
+// least as wide as the widest label. It used to be a fixed 34-40px, which is
+// narrower than labels like `140.0万`: on a phone the text was painted outside
+// the viewBox and simply vanished.
+const AXIS_CHAR_RATIO = 0.6;
+const AXIS_GUTTER_GAP = 14;
+
+function axisTextWidth(text, fontSize) {
+  let width = 0;
+  for (const char of String(text)) {
+    width += char.codePointAt(0) > 0x2e80 ? fontSize : fontSize * AXIS_CHAR_RATIO;
+  }
+  return width;
+}
+
+/** Left gutter wide enough for `labels`, never smaller than `minimum`. */
+export function axisGutter(labels, fontSize, minimum, width, capRatio = 0.32) {
+  let widest = 0;
+  for (const label of labels) widest = Math.max(widest, axisTextWidth(label, fontSize));
+  const wanted = Math.max(minimum, Math.ceil(widest) + AXIS_GUTTER_GAP);
+  const cap = Math.max(minimum, Math.round(width * capRatio));
+  return Math.min(wanted, cap);
+}
+
+/** Highest daily value across the series in the visible window (never 0). */
+function trendPeak(days, series, rangeDays) {
+  let peak = 0;
+  for (const label of buildDayWindow(days, rangeDays)) {
+    for (const item of series) {
+      peak = Math.max(peak, label.entry?.byModel?.[item.key] ?? label.entry?.byModel?.[item.model] ?? 0);
+    }
+  }
+  return peak > 0 ? peak : 1;
+}
+
+/** Lowest cache-rate band the chart draws, as whole percent. */
+function cacheBandLow(rates) {
+  const values = rates.filter((rate) => rate !== null);
+  if (values.length === 0) return 0;
+  return Math.max(0, Math.min(95, Math.floor(Math.min(...values) / 5) * 5));
+}
+
+/** Tallest stacked bar across the visible buckets (never 0). */
+function modelPeak(days, models, rangeDays, granularity) {
+  const keys = models.map((model) => `${model.provider}/${model.model}`);
+  let peak = 1;
+  for (const bucket of buildUsageBuckets(days, rangeDays, granularity)) {
+    let sum = 0;
+    for (const key of keys) sum += bucket.byModel.get(key) ?? 0;
+    if (sum > peak) peak = sum;
+  }
+  return peak;
+}
+
 function buildDayWindow(days, rangeDays) {
   const count = rangeDays === null ? Math.max(days.length, 2) : Math.max(rangeDays, 2);
   const byDay = new Map(days.map((entry) => [entry.day, entry]));
@@ -334,8 +388,14 @@ export function TokenTrend({ days, series, rangeDays }) {
   const padTop = Math.round(Math.max(12, Math.min(16, 6 + width * 0.01)));
   const padRight = Math.round(Math.max(26, Math.min(32, 10 + width * 0.02)));
   const padBottom = Math.round(Math.max(24, Math.min(30, 18 + width * 0.0115)));
-  const padLeft = Math.round(Math.max(38, Math.min(56, width * 0.054)));
   const axisSize = Math.max(10, Math.min(11, 9.5 + width * 0.0015));
+
+  const peak = useMemo(() => trendPeak(days, series, rangeDays), [days, series, rangeDays]);
+  const axisLabels = useMemo(
+    () => [0, 0.25, 0.5, 0.75, 1].map((ratio) => formatTokensZh(peak * (1 - ratio))),
+    [peak],
+  );
+  const padLeft = axisGutter(axisLabels, axisSize, 38, width);
 
   const plot = useMemo(() => {
     const usableWidth = width - padLeft - padRight;
@@ -346,14 +406,6 @@ export function TokenTrend({ days, series, rangeDays }) {
 
     const valueAt = (label, item) =>
       label.entry?.byModel?.[item.key] ?? label.entry?.byModel?.[item.model] ?? 0;
-
-    let peak = 0;
-    for (const label of labels) {
-      for (const item of series) {
-        peak = Math.max(peak, valueAt(label, item));
-      }
-    }
-    if (peak <= 0) peak = 1;
 
     const xOf = (index) => padLeft + (count === 1 ? usableWidth / 2 : (index / (count - 1)) * usableWidth);
     const yOf = (value) => padTop + usableHeight - (value / peak) * usableHeight;
@@ -381,7 +433,7 @@ export function TokenTrend({ days, series, rangeDays }) {
     const ticks = pickDateTicks(labels, xOf, usableWidth, width);
 
     return { count, labels, lines, gridLines, ticks, xOf, peak };
-  }, [days, series, rangeDays, width, height, padTop, padRight, padBottom, padLeft]);
+  }, [days, series, rangeDays, width, height, padTop, padRight, padBottom, padLeft, peak]);
 
   const hover = hoverIndex === null ? null : (plot.labels[hoverIndex] ?? null);
 
@@ -525,8 +577,18 @@ export function TokenCacheRate({ days, rangeDays }) {
   const padTop = Math.round(Math.max(12, Math.min(16, 6 + width * 0.01)));
   const padRight = Math.round(Math.max(26, Math.min(32, 10 + width * 0.02)));
   const padBottom = Math.round(Math.max(24, Math.min(28, 18 + width * 0.01)));
-  const padLeft = Math.round(Math.max(38, Math.min(50, width * 0.05)));
   const axisSize = Math.max(10, Math.min(11, 9.5 + width * 0.0015));
+
+  const rates = useMemo(
+    () => buildDayWindow(days, rangeDays).map((label) => cacheHitRate(label.entry?.totals)),
+    [days, rangeDays],
+  );
+  const low = cacheBandLow(rates);
+  const axisLabels = Array.from(
+    { length: 6 },
+    (_, index) => `${String(Math.round(100 - ((100 - low) / 5) * index))}%`,
+  );
+  const padLeft = axisGutter(axisLabels, axisSize, 38, width);
 
   const plot = useMemo(() => {
     const usableWidth = width - padLeft - padRight;
@@ -534,11 +596,7 @@ export function TokenCacheRate({ days, rangeDays }) {
     const labels = buildDayWindow(days, rangeDays);
     const count = labels.length;
 
-    const rates = labels.map((label) => cacheHitRate(label.entry?.totals));
     const values = rates.filter((rate) => rate !== null);
-
-    const low =
-      values.length === 0 ? 0 : Math.max(0, Math.min(95, Math.floor(Math.min(...values) / 5) * 5));
     const high = 100;
 
     const xOf = (index) => padLeft + (count === 1 ? usableWidth / 2 : (index / (count - 1)) * usableWidth);
@@ -570,7 +628,7 @@ export function TokenCacheRate({ days, rangeDays }) {
     const ticks = pickDateTicks(labels, xOf, usableWidth, width);
 
     return { count, labels, rates, points, segments, gridLines, ticks, xOf, yOf, low, high, values };
-  }, [days, rangeDays, width, height, padTop, padRight, padBottom, padLeft]);
+  }, [days, rangeDays, width, height, padTop, padRight, padBottom, padLeft, rates, low]);
 
   const empty = plot.values.length === 0;
 
@@ -960,8 +1018,19 @@ export function ModelUsageChart({ days, models, rangeDays }) {
   const padTop = Math.round(Math.max(12, Math.min(16, 6 + width * 0.01)));
   const padRight = Math.round(Math.max(26, Math.min(32, 10 + width * 0.02)));
   const padBottom = Math.round(Math.max(24, Math.min(30, 18 + width * 0.0115)));
-  const padLeft = Math.round(Math.max(40, Math.min(56, width * 0.054)));
   const axisSize = Math.max(10, Math.min(11, 9.5 + width * 0.0015));
+
+  const peak = useMemo(() => modelPeak(days, models, rangeDays, granularity), [
+    days,
+    models,
+    rangeDays,
+    granularity,
+  ]);
+  const axisLabels = useMemo(
+    () => [0, 0.25, 0.5, 0.75, 1].map((ratio) => formatTokensZh(peak * (1 - ratio))),
+    [peak],
+  );
+  const padLeft = axisGutter(axisLabels, axisSize, 40, width);
 
   const plot = useMemo(() => {
     const series = models.map((model, index) => ({
@@ -976,7 +1045,6 @@ export function ModelUsageChart({ days, models, rangeDays }) {
     const values = buckets.map((bucket) =>
       series.reduce((sum, item) => sum + (bucket.byModel.get(item.key) ?? 0), 0),
     );
-    const peak = Math.max(1, ...values);
     const usableWidth = Math.max(1, width - padLeft - padRight);
     const usableHeight = Math.max(1, height - padTop - padBottom);
     const slot = usableWidth / Math.max(1, count);
@@ -1022,7 +1090,7 @@ export function ModelUsageChart({ days, models, rangeDays }) {
     const ticks = pickDateTicks(buckets, xOf, usableWidth, width);
 
     return { buckets, series, values, peak, usableWidth, usableHeight, slot, bars, gridLines, ticks, xOf, yOf };
-  }, [days, models, rangeDays, granularity, width, height, padTop, padRight, padBottom, padLeft]);
+  }, [days, models, rangeDays, granularity, width, height, padTop, padRight, padBottom, padLeft, peak]);
 
   const empty = models.length === 0 || plot.values.every((value) => value <= 0);
   const hover = hoverIndex === null ? null : (plot.bars[hoverIndex] ?? null);

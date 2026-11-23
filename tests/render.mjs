@@ -1,7 +1,7 @@
 // Viewer-facing checks for the realtime panel and the auto-refresh controls.
 import assert from 'node:assert/strict';
 
-import { boot, text, waitFor } from './render-harness.mjs';
+import { bigRealtimeFixture, boot, text, waitFor } from './render-harness.mjs';
 
 const LIVE_CARD_LABEL = '实时 Token / 分钟';
 const CARDS_STORAGE_KEY = 'dsh-usage-overview/cards';
@@ -485,6 +485,53 @@ const LEGACY_CARD_IDS = ['total', 'peak-day', 'daily-average', 'realtime', 'curr
     '缓存命中率',
   ]);
   assert.equal(text(document.querySelector('.dus-cards-toggle')), '卡片12/13');
+
+  root.unmount();
+  window.close();
+}
+
+// ---- 14. A phone-width panel keeps every Y-axis label inside the chart -------
+// The labels are right-aligned in the left gutter; a fixed gutter used to clip
+// `140.0万` away on mobile, so the axis looked empty.
+function estimateLabelWidth(label, fontSize) {
+  let width = 0;
+  for (const char of String(label)) {
+    width += char.codePointAt(0) > 0x2e80 ? fontSize : fontSize * 0.62;
+  }
+  return width;
+}
+
+{
+  const { document, window, root } = await boot({ width: 300, realtime: bigRealtimeFixture() });
+  await waitFor(() => document.querySelectorAll('.dus-live-bar').length === 60, { label: 'first paint' });
+
+  const charts = [...document.querySelectorAll('.dus-chart-host')];
+  assert.ok(charts.length >= 2, 'charts rendered');
+  let checked = 0;
+  for (const host of charts) {
+    const svg = host.querySelector('svg');
+    if (svg === null) continue;
+    const labels = [...svg.querySelectorAll('text')].filter(
+      (node) => node.getAttribute('text-anchor') === 'end',
+    );
+    for (const node of labels) {
+      const x = Number(node.getAttribute('x'));
+      const size = Number(node.getAttribute('font-size'));
+      const width = estimateLabelWidth(node.textContent, size);
+      assert.ok(
+        x - width >= 0,
+        `${host.dataset.chart} label "${node.textContent}" starts ${String(Math.round(x - width))}px left of the chart`,
+      );
+      checked += 1;
+    }
+  }
+  assert.ok(checked >= 3, `axis labels were checked (${String(checked)})`);
+
+  // The realtime axis carries the wide labels from the fixture.
+  const realtimeTexts = [...document.querySelectorAll('.dus-realtime-host svg text')]
+    .filter((node) => node.getAttribute('text-anchor') === 'end')
+    .map(text);
+  assert.ok(realtimeTexts.some((label) => label.includes('万')), `realtime labels: ${realtimeTexts.join(' ')}`);
 
   root.unmount();
   window.close();

@@ -2,7 +2,7 @@
   "name": "dsh-usage-overview",
   "displayName": "DSH Usage Overview",
   "description": "A usage overview for DeepSeek Harness: real-time tokens per minute, token totals, activity heatmap, daily token and cache trends, and per-model attribution.",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "icon": "icon.svg",
   "author": "w-callan-w",
   "repository": {

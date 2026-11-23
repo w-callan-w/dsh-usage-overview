@@ -34,6 +34,22 @@ function realtimeFixture() {
   return buildRealtimeDocument(sessions, { now: generatedAt, windowMinutes: 60 });
 }
 
+/** A minute peak that forces wide axis labels ("280.0万"), as on a busy day. */
+export function bigRealtimeFixture() {
+  const minute = 60000;
+  const current = Math.floor(now / minute) * minute;
+  const sessions = [
+    {
+      id: 'session-big',
+      recent: [
+        { at: current + 20000, total: 2800000, provider: 'opencode-go', model: 'deepseek-v4.1-flash' },
+        { at: current - minute, total: 1400000, provider: 'opencode-go', model: 'deepseek-v4.1-flash' },
+      ],
+    },
+  ];
+  return buildRealtimeDocument(sessions, { now: current + 45000, windowMinutes: 60 });
+}
+
 const TODAY_TOKENS = 12345678;
 
 function todayKeyOf(ms) {
@@ -98,7 +114,9 @@ export async function boot(options = {}) {
     configurable: true,
     get: () => options.visibility ?? 'visible',
   });
-  Object.defineProperty(window.HTMLElement.prototype, 'clientWidth', { configurable: true, get() { return 960; } });
+  // `width` lets a test stand in for a phone-sized panel.
+  const panelWidth = options.width ?? 960;
+  Object.defineProperty(window.HTMLElement.prototype, 'clientWidth', { configurable: true, get() { return panelWidth; } });
   Object.defineProperty(window.Element.prototype, 'getBoundingClientRect', {
     configurable: true,
     value() {
